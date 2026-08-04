@@ -28,7 +28,7 @@ jobs:
         pyinstaller --noconsole --onefile --uac-admin app.py
 
     - name: Upload do EXE pronto
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ConfiguradorRede
         path: dist/app.exe
