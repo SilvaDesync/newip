@@ -11,24 +11,25 @@ jobs:
 
     steps:
     - name: Checkout do código
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4
 
-    - name: Configurar Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.10'
-
-    - name: Instalar PyInstaller
+    - name: Baixar Bat To Exe Converter
       run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
+        Invoke-WebRequest -Uri "https://github.com/tokyoneon/B2E/raw/master/Bat_To_Exe_Converter.exe" -OutFile "B2E.exe"
 
-    - name: Compilar para EXE
+    - name: Procurar arquivo BAT e Compilar para EXE
+      shell: powershell
       run: |
-        pyinstaller --noconsole --onefile --uac-admin app.py
+        $batFile = Get-ChildItem -Filter "*.bat" | Select-Object -First 1
+        if (-not $batFile) {
+            Write-Error "Nenhum arquivo .bat foi encontrado no repositorio!"
+            exit 1
+        }
+        Write-Host "Arquivo encontrado: $($batFile.Name)"
+        .\B2E.exe /bat "$($batFile.FullName)" /exe "dist/ConfiguradorRede.exe" /admin 1 /invisible 0
 
     - name: Upload do EXE pronto
       uses: actions/upload-artifact@v4
       with:
         name: ConfiguradorRede
-        path: dist/app.exe
+        path: dist/ConfiguradorRede.exe
