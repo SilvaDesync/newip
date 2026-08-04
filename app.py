@@ -82,7 +82,7 @@ def restaurar_dhcp():
 # Interface Gráfica
 root = tk.Tk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("450x540")
+root.geometry("480x640")
 root.resizable(False, False)
 root.configure(padx=20, pady=15)
 
@@ -90,39 +90,49 @@ tk.Label(root, text="PASSO 1: CONFIGURAÇÃO DE IP + IMPRESSORA", font=("Arial",
 
 # Campo 1
 tk.Label(root, text="1. Wi-Fi digite 1, Cabo de rede digite 2:").pack(anchor="w")
-entry_adaptador = tk.Entry(root, width=50)
+entry_adaptador = tk.Entry(root, width=55)
 entry_adaptador.pack(pady=(0, 8))
 
 # Campo 2
 tk.Label(root, text="2. Seu IP Principal ATUAL:").pack(anchor="w")
-entry_ip_atual = tk.Entry(root, width=50)
+entry_ip_atual = tk.Entry(root, width=55)
 entry_ip_atual.insert(0, "192.168.")
 entry_ip_atual.pack(pady=(0, 8))
 
 # Campo 3
 tk.Label(root, text="3. Seu Gateway ATUAL:").pack(anchor="w")
-entry_gw_atual = tk.Entry(root, width=50)
+entry_gw_atual = tk.Entry(root, width=55)
 entry_gw_atual.insert(0, "192.168.")
 entry_gw_atual.pack(pady=(0, 15))
 
 # Grupo Dados da Nova Rede
 tk.Label(root, text="DADOS DA NOVA REDE (Impressora)", font=("Arial", 10, "bold")).pack(anchor="w", pady=(0, 5))
 
+# Explicação Didática (Estilo Criança de 10 Anos)
+texto_explicacao = (
+    "💡 IMPORTANTE (Como uma regra de jogo):\n"
+    "Cada aparelho na rede precisa ter um número (IP) DIFERENTE no final!\n"
+    "Se o IP da impressora for 192.168.10.50, você NÃO PODE colocar 50 no final aqui.\n"
+    "Coloque um número diferente perto dele, como 192.168.10.51."
+)
+lbl_aviso = tk.Label(root, text=texto_explicacao, font=("Arial", 8, "italic"), bg="#FFF3CD", fg="#856404", justify="left", wraplength=430, relief="solid", bd=1, padx=8, pady=6)
+lbl_aviso.pack(fill="x", pady=(0, 10))
+
 # Campo 4
-tk.Label(root, text="4. NOVO IP secundário (ex: 192.168.10.100):").pack(anchor="w")
-entry_novo_ip = tk.Entry(root, width=50)
+tk.Label(root, text="4. NOVO IP secundário (ex: 192.168.10.51):").pack(anchor="w")
+entry_novo_ip = tk.Entry(root, width=55)
 entry_novo_ip.insert(0, "192.168.")
 entry_novo_ip.pack(pady=(0, 8))
 
 # Campo 5
 tk.Label(root, text="5. Máscara de sub-rede nova (ex: 255.255.255.0):").pack(anchor="w")
-entry_mascara = tk.Entry(root, width=50)
+entry_mascara = tk.Entry(root, width=55)
 entry_mascara.insert(0, "255.255.255.0")
 entry_mascara.pack(pady=(0, 8))
 
 # Campo 6
 tk.Label(root, text="6. NOVO Gateway secundário (ex: 192.168.10.1):").pack(anchor="w")
-entry_novo_gw = tk.Entry(root, width=50)
+entry_novo_gw = tk.Entry(root, width=55)
 entry_novo_gw.insert(0, "192.168.")
 entry_novo_gw.pack(pady=(0, 15))
 
