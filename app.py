@@ -182,6 +182,20 @@ def restaurar_dhcp():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao restaurar DHCP:\n{str(e)}")
 
+def reiniciar_spooler():
+    try:
+        subprocess.run("net stop spooler", shell=True, capture_output=True)
+        subprocess.run("net start spooler", shell=True, capture_output=True)
+        messagebox.showinfo("Sucesso", "Serviço Spooler de Impressão reiniciado com sucesso!")
+    except Exception as e:
+        messagebox.showerror("Erro", f"Falha ao reiniciar o Spooler:\n{str(e)}")
+
+def abrir_control_printers():
+    try:
+        subprocess.Popen("explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", shell=True)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
+
 def escanear_impressoras_sistema():
     itens = set()
     chaves = [
@@ -290,7 +304,7 @@ auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 # --- INTERFACE MODERNA DARK ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x480")
+root.geometry("500x560")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
@@ -368,6 +382,34 @@ btn_aplicar = ctk.CTkButton(
 )
 btn_aplicar.pack(fill="x", pady=(5, 8))
 
+# Frame Lado a Lado para Ferramentas do Spooler e Painel
+frame_duplo = ctk.CTkFrame(frame, fg_color="transparent")
+frame_duplo.pack(fill="x", pady=(0, 8))
+
+btn_spooler = ctk.CTkButton(
+    frame_duplo, 
+    text="🔄 Reiniciar Spooler", 
+    font=ctk.CTkFont(size=11, weight="bold"),
+    fg_color="#5865f2", 
+    hover_color="#4752c4", 
+    corner_radius=10,
+    height=38,
+    command=reiniciar_spooler
+)
+btn_spooler.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+btn_control = ctk.CTkButton(
+    frame_duplo, 
+    text="🖨️ Dispositivos/Impressoras", 
+    font=ctk.CTkFont(size=11, weight="bold"),
+    fg_color="#4e5058", 
+    hover_color="#3b3d44", 
+    corner_radius=10,
+    height=38,
+    command=abrir_control_printers
+)
+btn_control.pack(side="right", fill="x", expand=True, padx=(4, 0))
+
 btn_limpeza = ctk.CTkButton(
     frame, 
     text="🧹 Limpeza Total de Impressoras e Drivers", 
@@ -408,9 +450,9 @@ lbl_inst_titulo.pack(anchor="w", padx=12, pady=(10, 5))
 texto_instrucoes = (
     "1. Digite o endereço IP da impressora no campo acima.\n"
     "2. Clique em 'Aplicar Configuração' para autorizar a comunicação.\n"
-    "3. Use 'Limpeza Total' para remover drivers antigos corrompidos.\n"
-    "4. Se mudar de rede Wi-Fi/Cabo, clique em 'Restaurar DHCP (Sair)'.\n"
-    "5. Expanda as configurações avançadas caso precise de ajustes manuais."
+    "3. Use 'Reiniciar Spooler' caso a fila de impressão trave.\n"
+    "4. Use 'Limpeza Total' para remover drivers antigos corrompidos.\n"
+    "5. Se mudar de rede Wi-Fi/Cabo, clique em 'Restaurar DHCP (Sair)'."
 )
 
 lbl_inst_corpo = ctk.CTkLabel(
