@@ -3,13 +3,14 @@ import sys
 import subprocess
 import json
 import os
+import re
 import customtkinter as ctk
 from tkinter import messagebox
 
 CACHE_FILE = "config_cache.json"
 
 # Configuração do Tema Visual Moderno
-ctk.set_appearance_mode("System")  # Segue o tema do Windows (Dark / Light)
+ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 def check_admin():
@@ -46,41 +47,64 @@ def obter_nome_adaptador(valor):
         return "Ethernet"
     return valor
 
-def detectar_rede_automatica():
-    """Coleta automaticamente o tipo de adaptador (1 ou 2), IP atual e Gateway atual"""
+def detectar_rede_automatica_cmd():
+    adaptador_codigo = ""
+    ip_atual = ""
+    gw_atual = ""
+
     try:
-        # Comando PowerShell para obter a interface de rede IPv4 ativa com Gateway padrão
-        ps_cmd = (
-            "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | "
-            "Get-NetIPInterface -AddressFamily IPv4 | "
-            "Select-Object -First 1 InterfaceAlias, InterfaceIndex"
-        )
-        res = subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, text=True)
-        
-        if res.returncode == 0 and res.stdout.strip():
-            # Pega o nome do adaptador ativo
-            ps_adapter = (
-                "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | "
-                "Select-Object -First 1 -ExpandProperty InterfaceAlias"
-            )
-            adapter_name = subprocess.run(["powershell", "-Command", ps_adapter], capture_output=True, text=True).stdout.strip()
+        res = subprocess.run("ipconfig", shell=True, capture_output=True, text=True, encoding="cp850", errors="ignore")
+        output = res.stdout
 
-            # Pega o IP Atual
-            ps_ip = f"(Get-NetIPAddress -InterfaceAlias '{adapter_name}' -AddressFamily IPv4).IPAddress"
-            ip_atual = subprocess.run(["powershell", "-Command", ps_ip], capture_output=True, text=True).stdout.strip().split('\n')[0].strip()
+        bloco_atual = None
+        for linha in output.splitlines():
+            linha_strip = linha.strip()
 
-            # Pega o Gateway Atual
-            ps_gw = f"(Get-NetRoute -InterfaceAlias '{adapter_name}' -DestinationPrefix '0.0.0.0/0').NextHop"
-            gw_atual = subprocess.run(["powershell", "-Command", ps_gw], capture_output=True, text=True).stdout.strip().split('\n')[0].strip()
+            if "Adaptador" in linha or "adapter" in linha:
+                bloco_atual = linha_strip
 
-            # Mapeia para 1 (Wi-Fi) ou 2 (Ethernet/Cabo)
-            codigo_adaptador = "1" if "wi-fi" in adapter_name.lower() or "wireless" in adapter_name.lower() else "2"
+            elif "IPv4" in linha_strip and bloco_atual:
+                match_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha_strip)
+                if match_ip:
+                    ip_temp = match_ip.group(1)
+                    if not ip_temp.startswith("127.") and not ip_temp.startswith("169.254."):
+                        ip_atual = ip_temp
+                        if "wi-fi" in bloco_atual.lower() or "sem fio" in bloco_atual.lower() or "wireless" in bloco_atual.lower():
+                            adaptador_codigo = "1"
+                        else:
+                            adaptador_codigo = "2"
 
-            return codigo_adaptador, ip_atual, gw_atual
+            elif ("Gateway Padr" in linha_strip or "Default Gateway" in linha_strip) and ip_atual:
+                match_gw = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha_strip)
+                if match_gw:
+                    gw_atual = match_gw.group(1)
+                    break
+
     except Exception as e:
-        print(f"Erro ao auto-detectar rede: {e}")
-    
-    return "", "", ""
+        print(f"Erro ao auto-detectar via CMD: {e}")
+
+    return adaptador_codigo, ip_atual, gw_atual
+
+def ao_digitar_novo_ip(event=None):
+    """Calcula e preenche o gateway secundário terminado em .1 automaticamente"""
+    ip_texto = entry_novo_ip.get().strip()
+    partes = ip_texto.split(".")
+    if len(partes) == 4 and all(p.isdigit() for p in partes[:3]):
+        gateway_auto = f"{partes[0]}.{partes[1]}.{partes[2]}.1"
+        entry_novo_gw.delete(0, "end")
+        entry_novo_gw.insert(0, gateway_auto)
+
+def alternar_spoiler():
+    """Abre e fecha a seção dos campos 1, 2 e 3"""
+    global spoiler_aberto
+    if spoiler_aberto:
+        frame_spoiler.pack_forget()
+        btn_spoiler.configure(text="▶ 🛠️ Editar Dados do Computador (Rede Atual)")
+        spoiler_aberto = False
+    else:
+        frame_spoiler.pack(fill="x", pady=(0, 15), before=lbl_sub)
+        btn_spoiler.configure(text="▼ 🛠️ Ocultar Dados do Computador")
+        spoiler_aberto = True
 
 def aplicar_config():
     adaptador_raw = entry_adaptador.get()
@@ -146,52 +170,61 @@ def restaurar_dhcp():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao restaurar DHCP:\n{str(e)}")
 
-# Tenta ler o cache
+# Carrega cache e auto-detecta rede
 cache_dados = carregar_cache()
+auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 
-# Tenta auto-detectar rede atual
-auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica()
-
-# --- CONSTRUÇÃO DA INTERFACE MODERNA (CustomTkinter) ---
+# --- INTERFACE MODERNA ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x700")
+root.geometry("500x680")
 root.resizable(False, False)
 
-# Container Principal com Scroll suave
 frame = ctk.CTkScrollableFrame(root, corner_radius=15)
 frame.pack(fill="both", expand=True, padx=15, pady=15)
 
-# Título Principal
 lbl_titulo = ctk.CTkLabel(frame, text="PASSO 1: CONFIGURAÇÃO DE IP + IMPRESSORA", font=ctk.CTkFont(size=14, weight="bold"))
 lbl_titulo.pack(pady=(10, 15))
 
-# Campo 1
-lbl_1 = ctk.CTkLabel(frame, text="1. Wi-Fi digite 1, Cabo de rede digite 2:", anchor="w")
-lbl_1.pack(fill="x", pady=(0, 2))
-entry_adaptador = ctk.CTkEntry(frame, corner_radius=10, placeholder_text="1 para Wi-Fi ou 2 para Cabo")
+# Botão Spoiler/Expansível
+spoiler_aberto = False
+btn_spoiler = ctk.CTkButton(
+    frame, 
+    text="▶ 🛠️ Editar Dados do Computador (Rede Atual)", 
+    fg_color="transparent", 
+    text_color=("gray10", "gray90"),
+    hover_color=("gray85", "gray25"),
+    anchor="w",
+    command=alternar_spoiler
+)
+btn_spoiler.pack(fill="x", pady=(0, 10))
+
+# Container interno do Spoiler (oculto por padrão)
+frame_spoiler = ctk.CTkFrame(frame, corner_radius=10, fg_color=("gray90", "gray20"))
+
+lbl_1 = ctk.CTkLabel(frame_spoiler, text="1. Wi-Fi digite 1, Cabo de rede digite 2:", anchor="w")
+lbl_1.pack(fill="x", padx=10, pady=(10, 2))
+entry_adaptador = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_adaptador.insert(0, auto_adaptador or cache_dados.get("adaptador", ""))
-entry_adaptador.pack(fill="x", pady=(0, 10))
+entry_adaptador.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 2
-lbl_2 = ctk.CTkLabel(frame, text="2. Seu IP Principal ATUAL (Auto-detectado):", anchor="w")
-lbl_2.pack(fill="x", pady=(0, 2))
-entry_ip_atual = ctk.CTkEntry(frame, corner_radius=10)
+lbl_2 = ctk.CTkLabel(frame_spoiler, text="2. Seu IP Principal ATUAL:", anchor="w")
+lbl_2.pack(fill="x", padx=10, pady=(0, 2))
+entry_ip_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_ip_atual.insert(0, auto_ip or cache_dados.get("ip_atual", "192.168."))
-entry_ip_atual.pack(fill="x", pady=(0, 10))
+entry_ip_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 3
-lbl_3 = ctk.CTkLabel(frame, text="3. Seu Gateway ATUAL (Auto-detectado):", anchor="w")
-lbl_3.pack(fill="x", pady=(0, 2))
-entry_gw_atual = ctk.CTkEntry(frame, corner_radius=10)
+lbl_3 = ctk.CTkLabel(frame_spoiler, text="3. Seu Gateway ATUAL:", anchor="w")
+lbl_3.pack(fill="x", padx=10, pady=(0, 2))
+entry_gw_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_gw_atual.insert(0, auto_gw or cache_dados.get("gw_atual", "192.168."))
-entry_gw_atual.pack(fill="x", pady=(0, 20))
+entry_gw_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-# Separador / Subtítulo
+# Subtítulo Nova Rede
 lbl_sub = ctk.CTkLabel(frame, text="DADOS DA NOVA REDE (Impressora)", font=ctk.CTkFont(size=13, weight="bold"))
 lbl_sub.pack(anchor="w", pady=(0, 8))
 
-# Caixa Informativa Arredondada
+# Caixa Informativa
 texto_explicacao = (
     "💡 IMPORTANTE (Regra de Jogo):\n"
     "Cada aparelho na rede precisa ter um número final DIFERENTE!\n"
@@ -211,28 +244,29 @@ lbl_aviso = ctk.CTkLabel(
 )
 lbl_aviso.pack(fill="x", pady=(0, 15))
 
-# Campo 4
+# Campo 4 (com evento de auto-completar Gateway)
 lbl_4 = ctk.CTkLabel(frame, text="4. NOVO IP secundário (ex: 192.168.10.51):", anchor="w")
 lbl_4.pack(fill="x", pady=(0, 2))
 entry_novo_ip = ctk.CTkEntry(frame, corner_radius=10)
 entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168."))
+entry_novo_ip.bind("<KeyRelease>", ao_digitar_novo_ip)
 entry_novo_ip.pack(fill="x", pady=(0, 10))
 
-# Campo 5
-lbl_5 = ctk.CTkLabel(frame, text="5. Máscara de sub-rede nova (ex: 255.255.255.0):", anchor="w")
+# Campo 5 (Pré-preenchido com 255.255.255.0)
+lbl_5 = ctk.CTkLabel(frame, text="5. Máscara de sub-rede nova:", anchor="w")
 lbl_5.pack(fill="x", pady=(0, 2))
 entry_mascara = ctk.CTkEntry(frame, corner_radius=10)
 entry_mascara.insert(0, cache_dados.get("mascara", "255.255.255.0"))
 entry_mascara.pack(fill="x", pady=(0, 10))
 
-# Campo 6
-lbl_6 = ctk.CTkLabel(frame, text="6. NOVO Gateway secundário (ex: 192.168.10.1):", anchor="w")
+# Campo 6 (Preenchido automaticamente ao digitar no Campo 4)
+lbl_6 = ctk.CTkLabel(frame, text="6. NOVO Gateway secundário (Auto-preenchido):", anchor="w")
 lbl_6.pack(fill="x", pady=(0, 2))
 entry_novo_gw = ctk.CTkEntry(frame, corner_radius=10)
-entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168."))
+entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168.10.1"))
 entry_novo_gw.pack(fill="x", pady=(0, 20))
 
-# Botões Arredondados
+# Botões
 btn_aplicar = ctk.CTkButton(
     frame, 
     text="Aplicar Configuração", 
