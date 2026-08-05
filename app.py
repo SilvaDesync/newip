@@ -46,7 +46,6 @@ def obter_nome_adaptador(valor):
     return valor
 
 def executar_ps(comando):
-    """Executa comandos PowerShell de forma isolada e oculta."""
     return subprocess.run(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", comando],
         capture_output=True,
@@ -78,7 +77,6 @@ def detectar_rede_automatica_cmd():
 
             nome_bloco = linhas[0].lower()
 
-            # Pula adaptadores desconectados ou virtuais
             if "mídia desconectada" in nome_bloco or "media disconnected" in nome_bloco:
                 continue
 
@@ -98,18 +96,15 @@ def detectar_rede_automatica_cmd():
                     if match_gw:
                         gw_temp = match_gw.group(1)
 
-            # Se achou o IP válido da rede
             if ip_temp:
                 ip_atual = ip_temp
                 
-                # Regra de Segurança: Garante que o Gateway use a MESMA sub-rede do IP (Ex: 192.168.1.X -> 192.168.1.1)
                 octetos_ip = ip_temp.split(".")
                 subrede_ip = f"{octetos_ip[0]}.{octetos_ip[1]}.{octetos_ip[2]}"
 
                 if gw_temp and gw_temp.startswith(subrede_ip):
                     gw_atual = gw_temp
                 else:
-                    # Se o ipconfig pegou gateway de outro lugar, força o correto da mesma sub-rede
                     gw_atual = f"{subrede_ip}.1"
 
                 if "wi-fi" in nome_bloco or "sem fio" in nome_bloco or "wireless" in nome_bloco:
@@ -122,6 +117,7 @@ def detectar_rede_automatica_cmd():
         print(f"Erro ao auto-detectar via CMD: {e}")
 
     return adaptador_codigo, ip_atual, gw_atual
+
 def ao_digitar_novo_ip(event=None):
     ip_texto = entry_novo_ip.get().strip()
     partes = ip_texto.split(".")
@@ -237,6 +233,118 @@ def abrir_control_printers():
         subprocess.Popen("explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}")
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
+
+# --- JANELA CENTRAL DE DRIVERS ---
+def abrir_janela_drivers():
+    win = ctk.CTkToplevel(root)
+    win.title("Central de Drivers de Impressoras")
+    win.geometry("580x680")
+    win.resizable(False, False)
+    win.configure(fg_color="#18191c")
+    win.grab_set()
+
+    lbl_titulo_drv = ctk.CTkLabel(win, text="DOWNLOADS DE DRIVERS E UTILITÁRIOS", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff")
+    lbl_titulo_drv.pack(pady=(15, 10))
+
+    scroll_drv = ctk.CTkScrollableFrame(win, corner_radius=10, fg_color="#1e1f22")
+    scroll_drv.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+
+    dados_drivers = {
+        "BEMATECH": [
+            ("Driver Spooler MP-2500TH ao MP-5100 TH (x64)", "https://drive.google.com/file/d/1P1rTHrXbkayFjcxWNWPYpCs0Sq7f2Le1/view?usp=sharing"),
+            ("Driver Spooler MP-2800", "https://drive.google.com/file/d/1Iv5SmbIEOL0lQI2q156KB8fq3YL8obwT/view?usp=sharing"),
+            ("Printer Tool MP-2800", "https://drive.google.com/file/d/1HPRxiVQYWpkJSnCUaFwM3DGP52anBvw0/view?usp=sharing"),
+            ("Driver MP-4200 HS", "https://github.com/ElginDeveloperCommunity/Impressoras/tree/master/Impressoras%20Não%20Fiscais/Utilitários%20Bematech/MP-4200%20HS/Drivers")
+        ],
+        "ELGIN": [
+            ("Driver i9 Atualizado", "https://github.com/ElginDeveloperCommunity/Impressoras/tree/master/Impressoras%20Não%20Fiscais/Utilitários%20Elgin/i9/Drivers"),
+            ("Driver i8", "https://github.com/ElginDeveloperCommunity/Impressoras/tree/master/Impressoras%20Não%20Fiscais/Utilitários%20Elgin/i8/Drivers"),
+            ("Driver i7", "https://drive.google.com/file/d/1tjpb4Ygl-hKd3dPlNymN1_2U8_ks4NDz/view?usp=sharing"),
+            ("Driver Porta COM i7", "https://drive.google.com/file/d/1ZJlvShP5PRvIjLY6iLzRVrEjBbVklw3j/view?usp=sharing"),
+            ("Driver i10", "https://drive.google.com/file/d/1prtqBRxxNS_T-_OoHeEfOwNBp1vcn1Iy/view?usp=sharing"),
+            ("Driver L42", "https://drive.google.com/file/d/1r_4eAywBFZh02PUHK8rutKxp7XMES4fd/view?usp=sharing")
+        ],
+        "EPSON": [
+            ("Driver TM T20", "https://drive.google.com/file/d/1HAyR4OL6oSd1yN3b1C_P0MGh1AXP6wzD/view?usp=sharing"),
+            ("Driver TM T20X", "https://drive.google.com/file/d/1m7VQaAlsGY-4ugw5HCp2c99-L5Dmskbo/view?usp=sharing"),
+            ("Driver TM T88V / TM T88IV", "https://drive.google.com/file/d/1sjDDglu41w5to7D5Vm52fBrnFtoc2wNj/view?usp=sharing"),
+            ("Driver TM T81", "https://drive.google.com/drive/folders/1BIX0vwQTVZrf7N3peOKmIK3Q1GvkeUFt?usp=sharing"),
+            ("Driver TM-T20X-II", "https://epson.com.br/Suporte/Ponto-de-venda/Impressoras-de-recibos/Epson-TM-T20X-II/s/SPT_C31CL45011?review-filter=Windows+10+64-bit"),
+            ("Driver POS 58 / POS 80 Generic", "https://drive.google.com/file/d/1VzY-A28faTAhkJ7rSYtu8sRyrLG9WgC-/view?usp=sharing")
+        ],
+        "GENÉRICAS E OUTRAS MARCAS": [
+            ("Acervo Técnico / Drivers Sweda", "https://sweda.com.br/acervo-tecnico/"),
+            ("Sweda SI-300 Network Tool", "https://sweda.com.br/downloads/SI-300_Tool_Ver_2.03.zip"),
+            ("Daruma DR700", "https://drive.google.com/file/d/1Eoesq26Krws0Ew4u8O7uMs8Z95rBKki3/view?usp=sharing"),
+            ("Daruma DR800", "https://drive.google.com/drive/folders/1g8gbOXrHN_LIyj4s8Rbr3P4YDxw_4rCr?usp=sharing"),
+            ("Diebold IM453HU (E Outros)", "https://dieboldnixdorf.com.br/wp-content/uploads/2021/04/82d59195a9e944b737ddd2a6627a2f95.zip"),
+            ("Taicon TP500L (LAN)", "https://www.taicon.com.br/wp-content/uploads/2020/downloads/cd-driver-impressora-termica-lan.zip"),
+            ("Taicon TA-TP510L", "https://www.taicon.com.br/wp-content/uploads/2020/downloads/driver-tp510L.zip"),
+            ("Taicon TP 610L / 610W", "https://www.taicon.com.br/wp-content/uploads/2020/downloads/driverTA-TP610L-TA-TP610W.zip"),
+            ("Taicon Downloads (Linha TA-TP)", "https://www.taicon.com.br/downloads/"),
+            ("Olivetti PRT100", "https://www.olivetti.com/sites/default/files/products/drivers/toolkit_prt100_enhanced_2.00_03_0.exe"),
+            ("XPrinter (Exe Direct)", "https://drive.google.com/file/d/1Eoesq26Krws0Ew4u8O7uMs8Z95rBKki3/view?usp=sharing"),
+            ("Tanca TP-650 (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-650/Driver_Utilitarios_TP-650.zip"),
+            ("Tanca TP-550 (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-550/Driver_Utilitarios_TP-550.zip"),
+            ("Tanca TP-450 (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-450/Driver_Utilitarios_TP-450.zip"),
+            ("Tanca TP-620 Utility", "https://www.tanca.com.br/assets/conteudo/drivers/TP-620/PrinterTools_TP620.zip"),
+            ("Tanca TP-620+ Driver", "https://www.tanca.com.br/assets/conteudo/drivers/TP-620+/Driver_Windows.zip"),
+            ("Tanca Central de Drivers (Geral)", "https://tanca.com.br/drivers.php?cat=19"),
+            ("Jetway JP-800 Driver", "http://jetway.com.br/drives/02-impressoras/JP-800/Driver_Jetway_Printer/Windows10/JetwayPrinterDriverJP-800.exe"),
+            ("Jetway JP-800 Network Tool", "http://jetway.com.br/drives/02-impressoras/JP-800/Printertool/PrinterTool_JP-800.zip"),
+            ("Gertec G250 / G250W Driver", "https://www.gertec.com.br/wp-content/uploads/2022/06/Driver_Spooler_G250-G250W_VCOM-V1.0-1.zip"),
+            ("Gertec G250 Network Tool", "https://www.gertec.com.br/wp-content/uploads/2022/06/Utility_G250_G250W.zip"),
+            ("PertoPrinter Driver", "https://www.grupodigicon.com.br/perto/wp-content/uploads/sites/3/2018/10/290.05.091-290.05.089-290.05.085-PertoPrinter-Windows.zip"),
+            ("WayTec WP-100 (Drivers e Manuais)", "http://suporte.waytec.com.br/drivers/wp-100/"),
+            ("GoldenTec (Todos os Modelos)", "https://ibytef01.sharepoint.com/:u:/s/drivers/EQoDcx5ByopMmdtcV7VDlPQBPmrkE0QXkM3hUTXYLvvr0g?e=e1hUyM"),
+            ("GoldenTec 710 (POS80)", "https://ibytef01.sharepoint.com/:u:/s/drivers/Ee3pjWHZ11VClAj1ivLoqHMBtB5aNuxVjzYKFN7VTB6zqQ?e=SSzege"),
+            ("GSAN GS-JP80-UE(UB)", "https://drive.google.com/drive/folders/1VbWyXVRECnFR4DM3vBwwxFqVF761Cqlx"),
+            ("GSAN Central de Drivers", "https://www.gsan.com/Driver-dc498503.html"),
+            ("Repositório GitHub (Vários Drivers)", "https://github.com/Estima01/Drivers-de-impressora/tree/main")
+        ]
+    }
+
+    def criar_spoiler_categoria(parent, titulo, lista_itens):
+        frame_categoria = ctk.CTkFrame(parent, fg_color="#2b2d31", corner_radius=8)
+        frame_categoria.pack(fill="x", pady=5)
+
+        conteudo_frame = ctk.CTkFrame(frame_categoria, fg_color="#202225", corner_radius=6)
+        
+        def alternar():
+            if conteudo_frame.winfo_ismapped():
+                conteudo_frame.pack_forget()
+                btn_cat.configure(text=f"▶ {titulo}")
+            else:
+                conteudo_frame.pack(fill="x", padx=10, pady=(0, 10))
+                btn_cat.configure(text=f"▼ {titulo}")
+
+        btn_cat = ctk.CTkButton(
+            frame_categoria, 
+            text=f"▶ {titulo}", 
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="transparent", 
+            text_color="#ffffff",
+            anchor="w",
+            hover_color="#383a40",
+            command=alternar
+        )
+        btn_cat.pack(fill="x", padx=5, pady=5)
+
+        for nome, url in lista_itens:
+            btn_item = ctk.CTkButton(
+                conteudo_frame,
+                text=f"🔗 {nome}",
+                font=ctk.CTkFont(size=11),
+                fg_color="#2b2d31",
+                hover_color="#3b3d44",
+                anchor="w",
+                height=32,
+                command=lambda link=url: webbrowser.open(link)
+            )
+            btn_item.pack(fill="x", pady=2, padx=5)
+
+    for marca, itens in dados_drivers.items():
+        criar_spoiler_categoria(scroll_drv, marca, itens)
 
 def abrir_janela_ajuste_impressora():
     win = ctk.CTkToplevel(root)
@@ -536,7 +644,7 @@ cache_dados = carregar_cache()
 
 root = ctk.CTk()
 root.title("Configurador de Rede e Impressoras")
-root.geometry("520x720")
+root.geometry("520x760")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
@@ -638,6 +746,18 @@ btn_aplicar.pack(fill="x")
 # --- BLOCO: GERENCIAMENTO DE IMPRESSORAS ---
 lbl_sub_imp = ctk.CTkLabel(frame, text="GERENCIAMENTO E DISPOSITIVOS", font=ctk.CTkFont(size=11, weight="bold"), text_color="#949ba4", anchor="w")
 lbl_sub_imp.pack(fill="x", padx=5, pady=(5, 5))
+
+btn_central_drivers = ctk.CTkButton(
+    frame, 
+    text="📦 Central de Drivers (Links Direct)", 
+    font=ctk.CTkFont(size=12, weight="bold"),
+    fg_color="#4752c4", 
+    hover_color="#3c45a5", 
+    corner_radius=8,
+    height=36,
+    command=abrir_janela_drivers
+)
+btn_central_drivers.pack(fill="x", pady=(0, 8))
 
 frame_grid_imp = ctk.CTkFrame(frame, fg_color="transparent")
 frame_grid_imp.pack(fill="x", pady=(0, 10))
@@ -746,7 +866,7 @@ lbl_inst_titulo.pack(anchor="w", padx=12, pady=(8, 4))
 
 texto_instrucoes = (
     "1. Insira o IP da impressora e clique em 'Aplicar Configuração'.\n"
-    "2. Utilize os botões lado a lado para ações rápidas no Windows.\n"
+    "2. Abra a Central de Drivers para baixar utilitários e instaladores.\n"
     "3. Execute o aplicativo como Administrador para alterar portas e IPs."
 )
 
