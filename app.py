@@ -112,10 +112,10 @@ def alternar_spoiler():
     global spoiler_aberto
     if spoiler_aberto:
         frame_spoiler.pack_forget()
-        btn_spoiler.configure(text="▶ 🛠️ Exibir Todas as Configurações de Rede")
+        btn_spoiler.configure(text="▶ 🛠️ Exibir Configurações Avançadas de Rede")
         spoiler_aberto = False
     else:
-        frame_spoiler.pack(fill="x", pady=(0, 15), before=btn_aplicar)
+        frame_spoiler.pack(fill="x", pady=(0, 10), before=frame_acoes_rede)
         btn_spoiler.configure(text="▼ 🛠️ Ocultar Configurações Avançadas")
         spoiler_aberto = True
 
@@ -191,8 +191,21 @@ def restaurar_dhcp():
 
 def reiniciar_spooler():
     try:
-        executar_ps("Restart-Service -Name Spooler -Force")
-        messagebox.showinfo("Sucesso", "Serviço Spooler de Impressão reiniciado com sucesso!")
+        res_stop = subprocess.run(
+            ["net", "stop", "spooler"],
+            capture_output=True, text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        res_start = subprocess.run(
+            ["net", "start", "spooler"],
+            capture_output=True, text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        
+        if res_start.returncode == 0:
+            messagebox.showinfo("Sucesso", "Serviço Spooler de Impressão reiniciado com sucesso!")
+        else:
+            messagebox.showerror("Erro", f"Falha ao iniciar o Spooler:\n{res_start.stderr or res_start.stdout}")
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao reiniciar o Spooler:\n{str(e)}")
 
@@ -283,12 +296,12 @@ def abrir_janela_ajuste_impressora():
             frame_novos_dados.pack_forget()
             btn_web.pack_forget()
 
-    btn_verificar = ctk.CTkButton(frame_corpo, text="🔍 Buscar e Testar IP", fg_color="#5865f2", hover_color="#4752c4", command=testar_conexao_impressora)
+    btn_verificar = ctk.CTkButton(frame_corpo, text="🔍 Buscar e Testar IP", fg_color="#2b2d31", hover_color="#3b3d44", command=testar_conexao_impressora)
     btn_verificar.pack(fill="x", padx=15, pady=(5, 10))
 
     btn_web = ctk.CTkButton(
         frame_corpo, 
-        text="🌐 Abrir Painel de Configuração Web (EWS)", 
+        text="🌐 Abrir Painel Web (EWS)", 
         fg_color="#23a55a", 
         hover_color="#1d8a4b", 
         command=lambda: abrir_web_panel(entry_ip_busca.get().strip())
@@ -364,7 +377,7 @@ def abrir_janela_criar_dispositivo():
         except Exception as e:
             messagebox.showerror("Erro", f"Erro na execução:\n{str(e)}", parent=win)
 
-    btn_add_porta = ctk.CTkButton(frame_porta, text="➕ Cadastrar Porta", fg_color="#5865f2", hover_color="#4752c4", command=acao_criar_porta)
+    btn_add_porta = ctk.CTkButton(frame_porta, text="➕ Cadastrar Porta", fg_color="#383a40", hover_color="#4e5058", command=acao_criar_porta)
     btn_add_porta.pack(fill="x", padx=10, pady=(5, 10))
 
     lbl_sec2 = ctk.CTkLabel(scroll, text="2. CRIAR DISPOSITIVO E VINCULAR DRIVER", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
@@ -490,18 +503,17 @@ def abrir_janela_limpeza():
             messagebox.showinfo("Sucesso", "Todos os itens de impressão foram removidos com sucesso!")
             win.destroy()
 
-    btn_um = ctk.CTkButton(win, text="Remover Selecionado", fg_color="#e67e22", hover_color="#d35400", command=confirmar_remover_um)
+    btn_um = ctk.CTkButton(win, text="Remover Selecionado", fg_color="#2b2d31", hover_color="#3b3d44", command=confirmar_remover_um)
     btn_um.pack(fill="x", padx=15, pady=(0, 5))
 
-    btn_todos = ctk.CTkButton(win, text="[ EXCLUIR TODOS OS ITENS ]", fg_color="#c0392b", hover_color="#a93226", command=confirmar_remover_todos)
+    btn_todos = ctk.CTkButton(win, text="[ EXCLUIR TODOS OS ITENS ]", fg_color="#f23f43", hover_color="#d03135", command=confirmar_remover_todos)
     btn_todos.pack(fill="x", padx=15, pady=(0, 15))
 
 cache_dados = carregar_cache()
-auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 
 root = ctk.CTk()
-root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x660")
+root.title("Configurador de Rede e Impressoras")
+root.geometry("520x720")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
@@ -512,46 +524,50 @@ if os.path.exists(icon_file):
 frame = ctk.CTkScrollableFrame(root, corner_radius=15, fg_color="#1e1f22")
 frame.pack(fill="both", expand=True, padx=12, pady=12)
 
-lbl_titulo = ctk.CTkLabel(frame, text="PASSO 1: CONFIGURAÇÃO DE IP + IMPRESSORA", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff")
-lbl_titulo.pack(pady=(10, 15))
+# --- CABEÇALHO ---
+lbl_titulo = ctk.CTkLabel(frame, text="PAINEL DE CONFIGURAÇÃO DE REDE", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff")
+lbl_titulo.pack(pady=(10, 12))
 
-lbl_4 = ctk.CTkLabel(frame, text="Digite o IP da Impressora:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#dcddde", anchor="w")
-lbl_4.pack(fill="x", pady=(0, 2))
-entry_novo_ip = ctk.CTkEntry(frame, corner_radius=8, fg_color="#2b2d31", border_color="#383a40", text_color="#ffffff", placeholder_text="Ex: 192.168.10.50")
+# --- SEÇÃO: ENTRADA PRINCIPAL ---
+frame_principal = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
+frame_principal.pack(fill="x", pady=(0, 10), padx=5)
+
+lbl_4 = ctk.CTkLabel(frame_principal, text="Endereço IP da Impressora:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff", anchor="w")
+lbl_4.pack(fill="x", padx=12, pady=(10, 4))
+
+entry_novo_ip = ctk.CTkEntry(frame_principal, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff", placeholder_text="Ex: 192.168.10.50")
 entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168.10.50"))
 entry_novo_ip.bind("<KeyRelease>", ao_digitar_novo_ip)
-entry_novo_ip.pack(fill="x", pady=(0, 15))
+entry_novo_ip.pack(fill="x", padx=12, pady=(0, 12))
 
+# --- SPOILER: CONFIGURAÇÕES AVANÇADAS ---
 spoiler_aberto = False
 btn_spoiler = ctk.CTkButton(
     frame, 
-    text="▶ 🛠️ Exibir Todas as Configurações de Rede", 
+    text="▶ 🛠️ Exibir Configurações Avançadas de Rede", 
     fg_color="transparent", 
     text_color="#949ba4",
     hover_color="#2b2d31",
     anchor="w",
     command=alternar_spoiler
 )
-btn_spoiler.pack(fill="x", pady=(0, 10))
+btn_spoiler.pack(fill="x", pady=(0, 8))
 
 frame_spoiler = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
 
 lbl_1 = ctk.CTkLabel(frame_spoiler, text="1. Adaptador (1 para Wi-Fi / 2 para Cabo):", text_color="#dcddde", anchor="w")
 lbl_1.pack(fill="x", padx=10, pady=(10, 2))
 entry_adaptador = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
-entry_adaptador.insert(0, auto_adaptador or cache_dados.get("adaptador", ""))
 entry_adaptador.pack(fill="x", padx=10, pady=(0, 10))
 
 lbl_2 = ctk.CTkLabel(frame_spoiler, text="2. Seu IP Principal ATUAL:", text_color="#dcddde", anchor="w")
 lbl_2.pack(fill="x", padx=10, pady=(0, 2))
 entry_ip_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
-entry_ip_atual.insert(0, auto_ip or cache_dados.get("ip_atual", "192.168."))
 entry_ip_atual.pack(fill="x", padx=10, pady=(0, 10))
 
 lbl_3 = ctk.CTkLabel(frame_spoiler, text="3. Seu Gateway ATUAL:", text_color="#dcddde", anchor="w")
 lbl_3.pack(fill="x", padx=10, pady=(0, 2))
 entry_gw_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
-entry_gw_atual.insert(0, auto_gw or cache_dados.get("gw_atual", "192.168."))
 entry_gw_atual.pack(fill="x", padx=10, pady=(0, 10))
 
 lbl_5 = ctk.CTkLabel(frame_spoiler, text="5. Máscara de sub-rede nova:", text_color="#dcddde", anchor="w")
@@ -566,112 +582,149 @@ entry_novo_gw = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22",
 entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168.10.1"))
 entry_novo_gw.pack(fill="x", padx=10, pady=(0, 10))
 
+def auto_preencher_rede_tempo_real():
+    auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
+    
+    entry_adaptador.delete(0, "end")
+    entry_adaptador.insert(0, auto_adaptador or cache_dados.get("adaptador", ""))
+    
+    entry_ip_atual.delete(0, "end")
+    entry_ip_atual.insert(0, auto_ip or cache_dados.get("ip_atual", "192.168."))
+    
+    entry_gw_atual.delete(0, "end")
+    entry_gw_atual.insert(0, auto_gw or cache_dados.get("gw_atual", "192.168."))
+
+auto_preencher_rede_tempo_real()
+
+# --- BLOCO: AÇÕES DE REDE ---
+frame_acoes_rede = ctk.CTkFrame(frame, corner_radius=10, fg_color="transparent")
+frame_acoes_rede.pack(fill="x", pady=(0, 10))
+
 btn_aplicar = ctk.CTkButton(
-    frame, 
-    text="Aplicar Configuração", 
+    frame_acoes_rede, 
+    text="⚡ Aplicar Configuração de Rede", 
     font=ctk.CTkFont(size=12, weight="bold"),
     fg_color="#23a55a", 
     hover_color="#1d8a4b", 
-    corner_radius=10,
-    height=38,
+    corner_radius=8,
+    height=40,
     command=aplicar_config
 )
-btn_aplicar.pack(fill="x", pady=(5, 8))
+btn_aplicar.pack(fill="x")
+
+# --- BLOCO: GERENCIAMENTO DE IMPRESSORAS ---
+lbl_sub_imp = ctk.CTkLabel(frame, text="GERENCIAMENTO E DISPOSITIVOS", font=ctk.CTkFont(size=11, weight="bold"), text_color="#949ba4", anchor="w")
+lbl_sub_imp.pack(fill="x", padx=5, pady=(5, 5))
+
+frame_grid_imp = ctk.CTkFrame(frame, fg_color="transparent")
+frame_grid_imp.pack(fill="x", pady=(0, 10))
 
 btn_criar_disp_janela = ctk.CTkButton(
-    frame, 
-    text="➕ Criar Dispositivo e Porta de Impressão", 
-    font=ctk.CTkFont(size=12, weight="bold"),
+    frame_grid_imp, 
+    text="➕ Criar Dispositivo/Porta", 
+    font=ctk.CTkFont(size=11, weight="bold"),
     fg_color="#2b2d31", 
     hover_color="#3b3d44", 
     border_width=1,
-    border_color="#5865f2",
-    corner_radius=10,
-    height=38,
+    border_color="#383a40",
+    corner_radius=8,
+    height=36,
     command=abrir_janela_criar_dispositivo
 )
-btn_criar_disp_janela.pack(fill="x", pady=(0, 8))
+btn_criar_disp_janela.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
 btn_ajuste_imp = ctk.CTkButton(
-    frame, 
-    text="🌐 Configurar IP/Gateway da Impressora", 
-    font=ctk.CTkFont(size=12, weight="bold"),
-    fg_color="#9b59b6", 
-    hover_color="#8e44ad", 
-    corner_radius=10,
-    height=38,
+    frame_grid_imp, 
+    text="🌐 Configurar IP Impressora", 
+    font=ctk.CTkFont(size=11, weight="bold"),
+    fg_color="#2b2d31", 
+    hover_color="#3b3d44", 
+    border_width=1,
+    border_color="#383a40",
+    corner_radius=8,
+    height=36,
     command=abrir_janela_ajuste_impressora
 )
-btn_ajuste_imp.pack(fill="x", pady=(0, 8))
+btn_ajuste_imp.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
+# --- BLOCO: FERRAMENTAS DO SISTEMA ---
 frame_duplo = ctk.CTkFrame(frame, fg_color="transparent")
-frame_duplo.pack(fill="x", pady=(0, 8))
+frame_duplo.pack(fill="x", pady=(0, 10))
 
 btn_spooler = ctk.CTkButton(
     frame_duplo, 
     text="🔄 Reiniciar Spooler", 
     font=ctk.CTkFont(size=11, weight="bold"),
-    fg_color="#5865f2", 
-    hover_color="#4752c4", 
-    corner_radius=10,
-    height=38,
+    fg_color="#2b2d31", 
+    hover_color="#3b3d44", 
+    border_width=1,
+    border_color="#383a40",
+    corner_radius=8,
+    height=36,
     command=reiniciar_spooler
 )
 btn_spooler.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
 btn_control = ctk.CTkButton(
     frame_duplo, 
-    text="🖨️ Dispositivos/Impressoras", 
+    text="🖨️ Abrir Impressoras", 
     font=ctk.CTkFont(size=11, weight="bold"),
-    fg_color="#4e5058", 
+    fg_color="#2b2d31", 
     hover_color="#3b3d44", 
-    corner_radius=10,
-    height=38,
+    border_width=1,
+    border_color="#383a40",
+    corner_radius=8,
+    height=36,
     command=abrir_control_printers
 )
 btn_control.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
+# --- BLOCO: MANUTENÇÃO E RESTAURAÇÃO ---
+lbl_sub_manut = ctk.CTkLabel(frame, text="MANUTENÇÃO E RESTAURAÇÃO", font=ctk.CTkFont(size=11, weight="bold"), text_color="#949ba4", anchor="w")
+lbl_sub_manut.pack(fill="x", padx=5, pady=(5, 5))
+
 btn_limpeza = ctk.CTkButton(
     frame, 
     text="🧹 Limpeza Total de Impressoras e Drivers", 
-    font=ctk.CTkFont(size=12, weight="bold"),
-    fg_color="#f0b232", 
-    hover_color="#c89326", 
-    text_color="#000000",
-    corner_radius=10,
-    height=38,
+    font=ctk.CTkFont(size=11, weight="bold"),
+    fg_color="#2b2d31", 
+    hover_color="#3b3d44", 
+    border_width=1,
+    border_color="#383a40",
+    corner_radius=8,
+    height=36,
     command=abrir_janela_limpeza
 )
 btn_limpeza.pack(fill="x", pady=(0, 8))
 
 btn_restaurar = ctk.CTkButton(
     frame, 
-    text="Restaurar DHCP (Sair)", 
+    text="Restaurar DHCP Padrão", 
     font=ctk.CTkFont(size=12, weight="bold"),
     fg_color="#f23f43", 
     hover_color="#d03135", 
-    corner_radius=10,
+    corner_radius=8,
     height=38,
     command=restaurar_dhcp
 )
 btn_restaurar.pack(fill="x", pady=(0, 12))
 
+# --- INSTRUÇÕES E RODAPÉ ---
 frame_instrucoes = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
 frame_instrucoes.pack(fill="x", pady=(0, 5))
 
 lbl_inst_titulo = ctk.CTkLabel(
     frame_instrucoes, 
-    text="📌 INSTRUÇÕES E DICAS DE USO", 
-    font=ctk.CTkFont(size=12, weight="bold"),
+    text="📌 DICAS DE USO", 
+    font=ctk.CTkFont(size=11, weight="bold"),
     text_color="#ffffff"
 )
-lbl_inst_titulo.pack(anchor="w", padx=12, pady=(10, 5))
+lbl_inst_titulo.pack(anchor="w", padx=12, pady=(8, 4))
 
 texto_instrucoes = (
-    "1. Digite o endereço IP da impressora no campo acima.\n"
-    "2. Clique em 'Aplicar Configuração' para autorizar a comunicação.\n"
-    "3. Use 'Criar Dispositivo e Porta' para cadastrar novas portas TCP/USB e vincular drivers.\n"
-    "4. Execute a ferramenta como Administrador quando for aplicar alterações de rede."
+    "1. Insira o IP da impressora e clique em 'Aplicar Configuração'.\n"
+    "2. Utilize os botões lado a lado para ações rápidas no Windows.\n"
+    "3. Execute o aplicativo como Administrador para alterar portas e IPs."
 )
 
 lbl_inst_corpo = ctk.CTkLabel(
