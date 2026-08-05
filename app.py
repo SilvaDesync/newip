@@ -77,7 +77,8 @@ def detectar_rede_automatica_cmd():
 
             nome_bloco = linhas[0].lower()
 
-            if "mídia desconectada" in nome_bloco or "media disconnected" in nome_bloco:
+            # Ignores adaptadores virtuais comuns ou desativados
+            if any(term in nome_bloco for term in ["mídia desconectada", "media disconnected", "vbox", "vmware", "wsl", "vethernet"]):
                 continue
 
             ip_temp = ""
@@ -96,18 +97,20 @@ def detectar_rede_automatica_cmd():
                     if match_gw:
                         gw_temp = match_gw.group(1)
 
-            if ip_temp:
+            # Dá prioridade para a interface que possui Gateway ativo (a conexão real com a rede)
+            if ip_temp and gw_temp:
                 ip_atual = ip_temp
                 
                 octetos_ip = ip_temp.split(".")
                 subrede_ip = f"{octetos_ip[0]}.{octetos_ip[1]}.{octetos_ip[2]}"
 
-                if gw_temp and gw_temp.startswith(subrede_ip):
+                if gw_temp.startswith(subrede_ip):
                     gw_atual = gw_temp
                 else:
                     gw_atual = f"{subrede_ip}.1"
 
-                if "wi-fi" in nome_bloco or "sem fio" in nome_bloco or "wireless" in nome_bloco:
+                # Validação ampliada para Wi-Fi
+                if any(w in nome_bloco for w in ["wi-fi", "wifi", "wlan", "sem fio", "wireless"]):
                     adaptador_codigo = "1"
                 else:
                     adaptador_codigo = "2"
@@ -269,7 +272,9 @@ def abrir_janela_drivers():
             ("Driver TM T20X", "https://drive.google.com/file/d/1m7VQaAlsGY-4ugw5HCp2c99-L5Dmskbo/view?usp=sharing"),
             ("Driver TM T88V / TM T88IV", "https://drive.google.com/file/d/1sjDDglu41w5to7D5Vm52fBrnFtoc2wNj/view?usp=sharing"),
             ("Driver TM T81", "https://drive.google.com/drive/folders/1BIX0vwQTVZrf7N3peOKmIK3Q1GvkeUFt?usp=sharing"),
-            ("Driver TM-T20X-II", "https://epson.com.br/Suporte/Ponto-de-venda/Impressoras-de-recibos/Epson-TM-T20X-II/s/SPT_C31CL45011?review-filter=Windows+10+64-bit"),
+            ("Driver TM-T20X-II", "https://epson.com.br/Suporte/Ponto-de-venda/Impressoras-de-recibos/Epson-TM-T20X-II/s/SPT_C31CL45011?review-filter=Windows+10+64-bit")
+        ],
+        "POS 58 E POS 80": [
             ("Driver POS 58 / POS 80 Generic", "https://drive.google.com/file/d/1VzY-A28faTAhkJ7rSYtu8sRyrLG9WgC-/view?usp=sharing")
         ],
         "GENÉRICAS E OUTRAS MARCAS": [
