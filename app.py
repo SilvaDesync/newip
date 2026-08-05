@@ -1,4 +1,3 @@
-import ctypes
 import sys
 import subprocess
 import json
@@ -21,16 +20,6 @@ def resource_path(relative_path):
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
-
-def check_admin():
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-if not check_admin():
-    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
-    sys.exit()
 
 def carregar_cache():
     if os.path.exists(CACHE_FILE):
@@ -56,13 +45,29 @@ def obter_nome_adaptador(valor):
         return "Ethernet"
     return valor
 
+def executar_ps(comando):
+    """Executa comandos PowerShell de forma isolada e oculta."""
+    return subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", comando],
+        capture_output=True,
+        text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+    )
+
 def detectar_rede_automatica_cmd():
     adaptador_codigo = ""
     ip_atual = ""
     gw_atual = ""
 
     try:
-        res = subprocess.run("ipconfig", shell=True, capture_output=True, text=True, encoding="cp850", errors="ignore")
+        res = subprocess.run(
+            ["ipconfig"],
+            capture_output=True,
+            text=True,
+            encoding="cp850",
+            errors="ignore",
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
         output = res.stdout
 
         bloco_atual = None
@@ -146,17 +151,17 @@ def aplicar_config():
 
     try:
         cmd1 = f'netsh interface ipv4 set address name="{adaptador}" static {ip_atual} {mascara} {gw_atual} 1'
-        res1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+        res1 = subprocess.run(cmd1, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         if res1.returncode != 0:
             raise Exception(f"Passo 1 (Fixar IP):\n{res1.stderr or res1.stdout}")
 
         cmd2 = f'netsh interface ipv4 add address name="{adaptador}" {novo_ip_real} {mascara}'
-        res2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
+        res2 = subprocess.run(cmd2, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         if res2.returncode != 0:
             raise Exception(f"Passo 2 (Adicionar IP):\n{res2.stderr or res2.stdout}")
 
         cmd3 = f'netsh interface ipv4 add address name="{adaptador}" gateway={novo_gw} gwmetric=2'
-        res3 = subprocess.run(cmd3, shell=True, capture_output=True, text=True)
+        res3 = subprocess.run(cmd3, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         if res3.returncode != 0:
             raise Exception(f"Passo 3 (Adicionar Gateway):\n{res3.stderr or res3.stdout}")
 
@@ -175,10 +180,10 @@ def restaurar_dhcp():
 
     try:
         cmd1 = f'netsh interface ipv4 set address name="{adaptador}" source=dhcp'
-        subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+        subprocess.run(cmd1, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 
         cmd2 = f'netsh interface ipv4 set dns name="{adaptador}" source=dhcp'
-        subprocess.run(cmd2, shell=True, capture_output=True, text=True)
+        subprocess.run(cmd2, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 
         messagebox.showinfo("Sucesso", f"Rede do adaptador '{adaptador}' restaurada com sucesso para DHCP automático!")
     except Exception as e:
@@ -186,15 +191,14 @@ def restaurar_dhcp():
 
 def reiniciar_spooler():
     try:
-        subprocess.run("net stop spooler", shell=True, capture_output=True)
-        subprocess.run("net start spooler", shell=True, capture_output=True)
+        executar_ps("Restart-Service -Name Spooler -Force")
         messagebox.showinfo("Sucesso", "Serviço Spooler de Impressão reiniciado com sucesso!")
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao reiniciar o Spooler:\n{str(e)}")
 
 def abrir_control_printers():
     try:
-        subprocess.Popen("explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", shell=True)
+        subprocess.Popen("explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}")
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
 
@@ -246,7 +250,7 @@ def abrir_janela_ajuste_impressora():
         lbl_status.configure(text="🔍 Verificando comunicação...", text_color="#f0b232")
         win.update()
 
-        res_ping = subprocess.run(f"ping -n 1 -w 1000 {ip}", shell=True, capture_output=True)
+        res_ping = subprocess.run(["ping", "-n", "1", "-w", "1000", ip], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         ping_ok = res_ping.returncode == 0
 
         porta_ok = False
@@ -290,11 +294,9 @@ def abrir_janela_ajuste_impressora():
         command=lambda: abrir_web_panel(entry_ip_busca.get().strip())
     )
 
-# --- NOVA FUNCIONALIDADE: CRIAR PORTA E VINCULAR DISPOSITIVO ---
 def obter_drivers_instalados():
     try:
-        cmd = 'powershell -Command "Get-PrinterDriver | Select-Object -ExpandProperty Name"'
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        res = executar_ps("Get-PrinterDriver | Select-Object -ExpandProperty Name")
         drivers = [line.strip() for line in res.stdout.splitlines() if line.strip()]
         return sorted(drivers) if drivers else ["Generic / Text Only"]
     except Exception:
@@ -302,8 +304,7 @@ def obter_drivers_instalados():
 
 def obter_portas_instaladas():
     try:
-        cmd = 'powershell -Command "Get-PrinterPort | Select-Object -ExpandProperty Name"'
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        res = executar_ps("Get-PrinterPort | Select-Object -ExpandProperty Name")
         portas = [line.strip() for line in res.stdout.splitlines() if line.strip()]
         return sorted(portas) if portas else ["LPT1:", "USB001", "COM1:"]
     except Exception:
@@ -320,7 +321,6 @@ def abrir_janela_criar_dispositivo():
     scroll = ctk.CTkScrollableFrame(win, corner_radius=10, fg_color="#1e1f22")
     scroll.pack(fill="both", expand=True, padx=12, pady=12)
 
-    # SECÇÃO 1: CADASTRAR PORTA
     lbl_sec1 = ctk.CTkLabel(scroll, text="1. CADASTRAR NOVA PORTA (TCP/IP OU LOCAL)", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
     lbl_sec1.pack(anchor="w", pady=(5, 10))
 
@@ -351,11 +351,11 @@ def abrir_janela_criar_dispositivo():
 
         try:
             if tipo == "TCP/IP (Rede)":
-                cmd = f'powershell -Command "Add-PrinterPort -Name \'{val}\' -PrinterHostAddress \'{val}\' -ErrorAction Stop"'
+                cmd = f"Add-PrinterPort -Name '{val}' -PrinterHostAddress '{val}' -ErrorAction Stop"
             else:
-                cmd = f'powershell -Command "Add-PrinterPort -Name \'{val}\' -ErrorAction Stop"'
+                cmd = f"Add-PrinterPort -Name '{val}' -ErrorAction Stop"
 
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            res = executar_ps(cmd)
             if res.returncode == 0:
                 messagebox.showinfo("Sucesso", f"Porta '{val}' criada com sucesso!", parent=win)
                 atualizar_combos()
@@ -367,7 +367,6 @@ def abrir_janela_criar_dispositivo():
     btn_add_porta = ctk.CTkButton(frame_porta, text="➕ Cadastrar Porta", fg_color="#5865f2", hover_color="#4752c4", command=acao_criar_porta)
     btn_add_porta.pack(fill="x", padx=10, pady=(5, 10))
 
-    # SECÇÃO 2: VINCULAR DISPOSITIVO E DRIVER
     lbl_sec2 = ctk.CTkLabel(scroll, text="2. CRIAR DISPOSITIVO E VINCULAR DRIVER", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
     lbl_sec2.pack(anchor="w", pady=(5, 10))
 
@@ -411,8 +410,8 @@ def abrir_janela_criar_dispositivo():
             return
 
         try:
-            cmd = f'powershell -Command "Add-Printer -Name \'{nome}\' -DriverName \'{driver}\' -PortName \'{porta}\' -ErrorAction Stop"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            cmd = f"Add-Printer -Name '{nome}' -DriverName '{driver}' -PortName '{porta}' -ErrorAction Stop"
+            res = executar_ps(cmd)
 
             if res.returncode == 0:
                 messagebox.showinfo("Sucesso", f"Impressora '{nome}' criada com sucesso vinculada à porta '{porta}' e driver '{driver}'!", parent=win)
@@ -446,39 +445,8 @@ def escanear_impressoras_sistema():
     return sorted(list(itens))
 
 def executar_limpeza_item(target):
-    subprocess.run(f'powershell -Command "Remove-Printer -Name \'{target}\' -ErrorAction SilentlyContinue"', shell=True)
-    subprocess.run(f'rundll32 printui.dll,PrintUIEntry /dl /n "{target}" /q', shell=True)
-    subprocess.run('net stop spooler', shell=True)
-    subprocess.run('reg export "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print" "C:\\BackupPrint.reg" /y', shell=True)
-    
-    reg_paths = [
-        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Printers\\{target}',
-        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows x64\\Drivers\\Version-3\\{target}',
-        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows x64\\Drivers\\Version-4\\{target}',
-        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows NT x86\\Drivers\\Version-3\\{target}',
-        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows NT x86\\Drivers\\Version-4\\{target}'
-    ]
-    for path in reg_paths:
-        subprocess.run(f'reg delete "{path}" /f', shell=True)
-
-    vendor = target.split(' ')[0].replace('-', '')
-    ps_cmd_uninstall = (
-        f"$vendor = '{vendor}';"
-        f"Get-ChildItem -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | "
-        f"Get-ItemProperty | Where-Object {{ $_.DisplayName -like \"*$vendor*\" -or $_.DisplayName -like \"*{target}*\" -or $_.DisplayName -like '*APD*' -or $_.DisplayName -like '*POS Printer*' }} | "
-        f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
-    )
-    subprocess.run(f'powershell -Command "{ps_cmd_uninstall}"', shell=True)
-
-    ps_cmd_folders = (
-        f"$vendor = '{vendor}';"
-        f"Remove-Item -Path \"HKLM:\\SOFTWARE\\$vendor\", \"HKLM:\\SOFTWARE\\WOW6432Node\\$vendor\", 'HKLM:\\SOFTWARE\\EPSON', 'HKLM:\\SOFTWARE\\WOW6432Node\\EPSON', 'HKLM:\\SOFTWARE\\POS Printer Driver' -Recurse -Force -ErrorAction SilentlyContinue;"
-        f"Remove-Item -Path \"C:\\*$vendor*\", 'C:\\POS Printer Driver*', 'C:\\Program Files\\POS Printer Driver*', 'C:\\Program Files (x86)\\POS Printer Driver*' -Recurse -Force -ErrorAction SilentlyContinue"
-    )
-    subprocess.run(f'powershell -Command "{ps_cmd_folders}"', shell=True)
-
-    subprocess.run('del /Q /F /S "%systemroot%\\System32\\spool\\PRINTERS\\*.*"', shell=True)
-    subprocess.run('net start spooler', shell=True)
+    executar_ps(f"Remove-Printer -Name '{target}' -ErrorAction SilentlyContinue")
+    executar_ps(f"Remove-PrinterDriver -Name '{target}' -ErrorAction SilentlyContinue")
 
 def abrir_janela_limpeza():
     itens = escanear_impressoras_sistema()
@@ -528,11 +496,9 @@ def abrir_janela_limpeza():
     btn_todos = ctk.CTkButton(win, text="[ EXCLUIR TODOS OS ITENS ]", fg_color="#c0392b", hover_color="#a93226", command=confirmar_remover_todos)
     btn_todos.pack(fill="x", padx=15, pady=(0, 15))
 
-
 cache_dados = carregar_cache()
 auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 
-# --- INTERFACE MODERNA DARK ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
 root.geometry("500x660")
@@ -600,7 +566,6 @@ entry_novo_gw = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22",
 entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168.10.1"))
 entry_novo_gw.pack(fill="x", padx=10, pady=(0, 10))
 
-# BOTÕES DE AÇÃO
 btn_aplicar = ctk.CTkButton(
     frame, 
     text="Aplicar Configuração", 
@@ -613,7 +578,6 @@ btn_aplicar = ctk.CTkButton(
 )
 btn_aplicar.pack(fill="x", pady=(5, 8))
 
-# NOVO BOTÃO: CRIAR DISPOSITIVO E PORTAS
 btn_criar_disp_janela = ctk.CTkButton(
     frame, 
     text="➕ Criar Dispositivo e Porta de Impressão", 
@@ -628,7 +592,6 @@ btn_criar_disp_janela = ctk.CTkButton(
 )
 btn_criar_disp_janela.pack(fill="x", pady=(0, 8))
 
-# BOTÃO: GERENCIAR IMPRESSORA
 btn_ajuste_imp = ctk.CTkButton(
     frame, 
     text="🌐 Configurar IP/Gateway da Impressora", 
@@ -641,7 +604,6 @@ btn_ajuste_imp = ctk.CTkButton(
 )
 btn_ajuste_imp.pack(fill="x", pady=(0, 8))
 
-# Frame Lado a Lado para Ferramentas do Spooler e Painel
 frame_duplo = ctk.CTkFrame(frame, fg_color="transparent")
 frame_duplo.pack(fill="x", pady=(0, 8))
 
@@ -694,7 +656,6 @@ btn_restaurar = ctk.CTkButton(
 )
 btn_restaurar.pack(fill="x", pady=(0, 12))
 
-# PAINEL DE INSTRUÇÕES
 frame_instrucoes = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
 frame_instrucoes.pack(fill="x", pady=(0, 5))
 
@@ -710,8 +671,7 @@ texto_instrucoes = (
     "1. Digite o endereço IP da impressora no campo acima.\n"
     "2. Clique em 'Aplicar Configuração' para autorizar a comunicação.\n"
     "3. Use 'Criar Dispositivo e Porta' para cadastrar novas portas TCP/USB e vincular drivers.\n"
-    "4. Use 'Reiniciar Spooler' caso a fila de impressão trave.\n"
-    "5. Use 'Limpeza Total' para remover drivers antigos corrompidos."
+    "4. Execute a ferramenta como Administrador quando for aplicar alterações de rede."
 )
 
 lbl_inst_corpo = ctk.CTkLabel(
