@@ -77,8 +77,8 @@ def detectar_rede_automatica_cmd():
 
             nome_bloco = linhas[0].lower()
 
-            # Ignores adaptadores virtuais comuns ou desativados
-            if any(term in nome_bloco for term in ["mídia desconectada", "media disconnected", "vbox", "vmware", "wsl", "vethernet"]):
+            # Ignora adaptadores virtuais, desativados ou secundários
+            if any(term in nome_bloco for term in ["mídia desconectada", "media disconnected", "vbox", "vmware", "wsl", "vethernet", "bluetooth", "loopback"]):
                 continue
 
             ip_temp = ""
@@ -95,21 +95,23 @@ def detectar_rede_automatica_cmd():
                 elif "Gateway Padr" in linha or "Default Gateway" in linha:
                     match_gw = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha)
                     if match_gw:
-                        gw_temp = match_gw.group(1)
+                        gw_val = match_gw.group(1)
+                        if gw_val != "0.0.0.0":
+                            gw_temp = gw_val
 
-            # Dá prioridade para a interface que possui Gateway ativo (a conexão real com a rede)
-            if ip_temp and gw_temp:
+            # Valida apenas se encontrou um IP real conectado
+            if ip_temp:
                 ip_atual = ip_temp
-                
                 octetos_ip = ip_temp.split(".")
                 subrede_ip = f"{octetos_ip[0]}.{octetos_ip[1]}.{octetos_ip[2]}"
 
-                if gw_temp.startswith(subrede_ip):
+                # CORREÇÃO CRÍTICA: Garante que o Gateway SEMPRE pertença à mesma sub-rede do IP do cliente!
+                if gw_temp and gw_temp.startswith(f"{subrede_ip}."):
                     gw_atual = gw_temp
                 else:
                     gw_atual = f"{subrede_ip}.1"
 
-                # Validação ampliada para Wi-Fi
+                # Identificação correta de Wi-Fi vs Cabo
                 if any(w in nome_bloco for w in ["wi-fi", "wifi", "wlan", "sem fio", "wireless"]):
                     adaptador_codigo = "1"
                 else:
