@@ -5,6 +5,8 @@ import json
 import os
 import re
 import winreg
+import socket
+import webbrowser
 import customtkinter as ctk
 from tkinter import messagebox
 
@@ -196,6 +198,102 @@ def abrir_control_printers():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
 
+# --- NOVA TELA: GERENCIAR IP INTERNO DA IMPRESSORA ---
+def abrir_janela_ajuste_impressora():
+    win = ctk.CTkToplevel(root)
+    win.title("Ajuste de IP e Gateway da Impressora")
+    win.geometry("450x480")
+    win.resizable(False, False)
+    win.configure(fg_color="#18191c")
+    win.grab_set()
+
+    lbl_titulo = ctk.CTkLabel(win, text="DIAGNOSTICAR & APLICAR NOVO IP NA IMPRESSORA", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
+    lbl_titulo.pack(pady=(15, 10))
+
+    frame_corpo = ctk.CTkFrame(win, corner_radius=10, fg_color="#202225")
+    frame_corpo.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+
+    lbl_ip_busca = ctk.CTkLabel(frame_corpo, text="IP Atual da Impressora:", text_color="#dcddde", anchor="w")
+    lbl_ip_busca.pack(fill="x", padx=15, pady=(10, 2))
+
+    entry_ip_busca = ctk.CTkEntry(frame_corpo, corner_radius=8, fg_color="#2b2d31", border_color="#383a40", text_color="#ffffff", placeholder_text="Ex: 192.168.10.50")
+    entry_ip_busca.insert(0, entry_novo_ip.get().strip())
+    entry_ip_busca.pack(fill="x", padx=15, pady=(0, 10))
+
+    lbl_status = ctk.CTkLabel(frame_corpo, text="Status: Aguardando verificação...", font=ctk.CTkFont(size=11), text_color="#949ba4")
+    lbl_status.pack(pady=5)
+
+    frame_novos_dados = ctk.CTkFrame(frame_corpo, fg_color="transparent")
+
+    lbl_novo_ip_imp = ctk.CTkLabel(frame_novos_dados, text="Novo IPv4 para Impressora:", text_color="#dcddde", anchor="w")
+    lbl_novo_ip_imp.pack(fill="x", pady=(5, 2))
+    entry_novo_ip_imp = ctk.CTkEntry(frame_novos_dados, corner_radius=8, fg_color="#2b2d31", border_color="#383a40", text_color="#ffffff")
+    entry_novo_ip_imp.pack(fill="x", pady=(0, 10))
+
+    lbl_novo_gw_imp = ctk.CTkLabel(frame_novos_dados, text="Novo Gateway da Impressora:", text_color="#dcddde", anchor="w")
+    lbl_novo_gw_imp.pack(fill="x", pady=(0, 2))
+    entry_novo_gw_imp = ctk.CTkEntry(frame_novos_dados, corner_radius=8, fg_color="#2b2d31", border_color="#383a40", text_color="#ffffff")
+    entry_novo_gw_imp.pack(fill="x", pady=(0, 10))
+
+    def abrir_web_panel(ip):
+        webbrowser.open(f"http://{ip}")
+
+    def testar_conexao_impressora():
+        ip = entry_ip_busca.get().strip()
+        if not ip:
+            messagebox.showwarning("Aviso", "Digite um IP para testar!", parent=win)
+            return
+
+        lbl_status.configure(text="🔍 Verificando comunicação...", text_color="#f0b232")
+        win.update()
+
+        # Teste de Ping
+        res_ping = subprocess.run(f"ping -n 1 -w 1000 {ip}", shell=True, capture_output=True)
+        ping_ok = res_ping.returncode == 0
+
+        # Teste de Porta de Impressão (RAW 9100 ou HTTP 80)
+        porta_ok = False
+        for porta in [9100, 80, 443]:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1)
+                if s.connect_ex((ip, porta)) == 0:
+                    porta_ok = True
+                    s.close()
+                    break
+                s.close()
+            except:
+                pass
+
+        if ping_ok or porta_ok:
+            lbl_status.configure(text=f"✅ Impressora Localizada no IP {ip}!", text_color="#23a55a")
+            frame_novos_dados.pack(fill="x", padx=15, pady=5)
+            
+            # Preenche sugestões
+            partes = ip.split(".")
+            if len(partes) == 4:
+                entry_novo_gw_imp.delete(0, "end")
+                entry_novo_gw_imp.insert(0, f"{partes[0]}.{partes[1]}.{partes[2]}.1")
+                entry_novo_ip_imp.delete(0, "end")
+                entry_novo_ip_imp.insert(0, ip)
+
+            btn_web.pack(fill="x", padx=15, pady=(5, 10))
+        else:
+            lbl_status.configure(text=f"❌ Nenhuma impressora respondeu no IP {ip}", text_color="#f23f43")
+            frame_novos_dados.pack_forget()
+            btn_web.pack_forget()
+
+    btn_verificar = ctk.CTkButton(frame_corpo, text="🔍 Buscar e Testar IP", fg_color="#5865f2", hover_color="#4752c4", command=testar_conexao_impressora)
+    btn_verificar.pack(fill="x", padx=15, pady=(5, 10))
+
+    btn_web = ctk.CTkButton(
+        frame_corpo, 
+        text="🌐 Abrir Painel de Configuração Web (EWS)", 
+        fg_color="#23a55a", 
+        hover_color="#1d8a4b", 
+        command=lambda: abrir_web_panel(entry_ip_busca.get().strip())
+    )
+
 def escanear_impressoras_sistema():
     itens = set()
     chaves = [
@@ -304,7 +402,7 @@ auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 # --- INTERFACE MODERNA DARK ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x560")
+root.geometry("500x610")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
@@ -382,6 +480,19 @@ btn_aplicar = ctk.CTkButton(
 )
 btn_aplicar.pack(fill="x", pady=(5, 8))
 
+# NOVO BOTÃO: GERENCIAR IMPRESSORA
+btn_ajuste_imp = ctk.CTkButton(
+    frame, 
+    text="🌐 Configurar IP/Gateway da Impressora", 
+    font=ctk.CTkFont(size=12, weight="bold"),
+    fg_color="#9b59b6", 
+    hover_color="#8e44ad", 
+    corner_radius=10,
+    height=38,
+    command=abrir_janela_ajuste_impressora
+)
+btn_ajuste_imp.pack(fill="x", pady=(0, 8))
+
 # Frame Lado a Lado para Ferramentas do Spooler e Painel
 frame_duplo = ctk.CTkFrame(frame, fg_color="transparent")
 frame_duplo.pack(fill="x", pady=(0, 8))
@@ -450,9 +561,9 @@ lbl_inst_titulo.pack(anchor="w", padx=12, pady=(10, 5))
 texto_instrucoes = (
     "1. Digite o endereço IP da impressora no campo acima.\n"
     "2. Clique em 'Aplicar Configuração' para autorizar a comunicação.\n"
-    "3. Use 'Reiniciar Spooler' caso a fila de impressão trave.\n"
-    "4. Use 'Limpeza Total' para remover drivers antigos corrompidos.\n"
-    "5. Se mudar de rede Wi-Fi/Cabo, clique em 'Restaurar DHCP (Sair)'."
+    "3. Clique em 'Configurar IP/Gateway da Impressora' para testar/acessar a impressora.\n"
+    "4. Use 'Reiniciar Spooler' caso a fila de impressão trave.\n"
+    "5. Use 'Limpeza Total' para remover drivers antigos corrompidos."
 )
 
 lbl_inst_corpo = ctk.CTkLabel(
