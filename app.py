@@ -60,40 +60,68 @@ def detectar_rede_automatica_cmd():
     gw_atual = ""
 
     try:
-        # Busca a rota padrão ativa (0.0.0.0/0) para identificar a interface real com acesso à rede
-        ps_cmd = (
-            "Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | "
-            "Select-Object -First 1 -ExpandProperty InterfaceIndex"
+        res = subprocess.run(
+            ["ipconfig"],
+            capture_output=True,
+            text=True,
+            encoding="cp850",
+            errors="ignore",
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
-        res_idx = executar_ps(ps_cmd)
-        ifIndex = res_idx.stdout.strip()
+        output = res.stdout
+        blocos = output.split("\n\n")
 
-        if ifIndex:
-            # Obtém o Gateway associado a esse índice de interface
-            cmd_gw = f"Get-NetRoute -DestinationPrefix '0.0.0.0/0' -InterfaceIndex {ifIndex} | Select-Object -ExpandProperty NextHop"
-            res_gw = executar_ps(cmd_gw)
-            gw_atual = res_gw.stdout.strip()
+        for bloco in blocos:
+            linhas = [l.strip() for l in bloco.splitlines() if l.strip()]
+            if not linhas:
+                continue
 
-            # Obtém o IP IPv4 associado a essa mesma interface
-            cmd_ip = f"Get-NetIPAddress -InterfaceIndex {ifIndex} -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress"
-            res_ip = executar_ps(cmd_ip)
-            ip_atual = res_ip.stdout.strip().splitlines()[0] if res_ip.stdout.strip() else ""
+            nome_bloco = linhas[0].lower()
 
-            # Obtém o alias/nome do adaptador para saber se é Wi-Fi ou Ethernet
-            cmd_alias = f"Get-NetAdapter -InterfaceIndex {ifIndex} | Select-Object -ExpandProperty Name"
-            res_alias = executar_ps(cmd_alias)
-            nome_adapter = res_alias.stdout.strip().lower()
+            # Pula adaptadores desconectados ou virtuais
+            if "mídia desconectada" in nome_bloco or "media disconnected" in nome_bloco:
+                continue
 
-            if "wi-fi" in nome_adapter or "sem fio" in nome_adapter or "wireless" in nome_adapter:
-                adaptador_codigo = "1"
-            else:
-                adaptador_codigo = "2"
+            ip_temp = ""
+            gw_temp = ""
+
+            for linha in linhas:
+                if "IPv4" in linha:
+                    match_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha)
+                    if match_ip:
+                        ip_val = match_ip.group(1)
+                        if not ip_val.startswith("127.") and not ip_val.startswith("169.254."):
+                            ip_temp = ip_val
+
+                elif "Gateway Padr" in linha or "Default Gateway" in linha:
+                    match_gw = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha)
+                    if match_gw:
+                        gw_temp = match_gw.group(1)
+
+            # Se achou o IP válido da rede
+            if ip_temp:
+                ip_atual = ip_temp
+                
+                # Regra de Segurança: Garante que o Gateway use a MESMA sub-rede do IP (Ex: 192.168.1.X -> 192.168.1.1)
+                octetos_ip = ip_temp.split(".")
+                subrede_ip = f"{octetos_ip[0]}.{octetos_ip[1]}.{octetos_ip[2]}"
+
+                if gw_temp and gw_temp.startswith(subrede_ip):
+                    gw_atual = gw_temp
+                else:
+                    # Se o ipconfig pegou gateway de outro lugar, força o correto da mesma sub-rede
+                    gw_atual = f"{subrede_ip}.1"
+
+                if "wi-fi" in nome_bloco or "sem fio" in nome_bloco or "wireless" in nome_bloco:
+                    adaptador_codigo = "1"
+                else:
+                    adaptador_codigo = "2"
+                break
 
     except Exception as e:
-        print(f"Erro ao detectar dados de rede via PowerShell: {e}")
+        print(f"Erro ao auto-detectar via CMD: {e}")
 
     return adaptador_codigo, ip_atual, gw_atual
-
 def ao_digitar_novo_ip(event=None):
     ip_texto = entry_novo_ip.get().strip()
     partes = ip_texto.split(".")
