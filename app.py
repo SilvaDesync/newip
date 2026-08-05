@@ -39,9 +39,9 @@ def salvar_cache(dados):
 
 def obter_nome_adaptador(valor):
     valor = str(valor).strip()
-    if valor == "1":
+    if valor in ["1", "Wi-Fi"]:
         return "Wi-Fi"
-    elif valor == "2":
+    elif valor in ["2", "Ethernet", "Cabo"]:
         return "Ethernet"
     return valor
 
@@ -54,7 +54,7 @@ def executar_ps(comando):
     )
 
 def detectar_rede_automatica_cmd():
-    adaptador_codigo = ""
+    adaptador_codigo = "Cabo"
     ip_atual = ""
     gw_atual = ""
 
@@ -77,7 +77,6 @@ def detectar_rede_automatica_cmd():
 
             nome_bloco = linhas[0].lower()
 
-            # Ignora adaptadores virtuais, desativados ou secundários
             if any(term in nome_bloco for term in ["mídia desconectada", "media disconnected", "vbox", "vmware", "wsl", "vethernet", "bluetooth", "loopback"]):
                 continue
 
@@ -99,23 +98,20 @@ def detectar_rede_automatica_cmd():
                         if gw_val != "0.0.0.0":
                             gw_temp = gw_val
 
-            # Valida apenas se encontrou um IP real conectado
             if ip_temp:
                 ip_atual = ip_temp
                 octetos_ip = ip_temp.split(".")
                 subrede_ip = f"{octetos_ip[0]}.{octetos_ip[1]}.{octetos_ip[2]}"
 
-                # CORREÇÃO CRÍTICA: Garante que o Gateway SEMPRE pertença à mesma sub-rede do IP do cliente!
                 if gw_temp and gw_temp.startswith(f"{subrede_ip}."):
                     gw_atual = gw_temp
                 else:
                     gw_atual = f"{subrede_ip}.1"
 
-                # Identificação correta de Wi-Fi vs Cabo
                 if any(w in nome_bloco for w in ["wi-fi", "wifi", "wlan", "sem fio", "wireless"]):
-                    adaptador_codigo = "1"
+                    adaptador_codigo = "Wi-Fi"
                 else:
-                    adaptador_codigo = "2"
+                    adaptador_codigo = "Cabo"
                 break
 
     except Exception as e:
@@ -144,7 +140,7 @@ def alternar_spoiler():
         spoiler_aberto = True
 
 def aplicar_config():
-    adaptador_raw = entry_adaptador.get()
+    adaptador_raw = seg_adaptador.get()
     adaptador = obter_nome_adaptador(adaptador_raw)
     
     ip_atual = entry_ip_atual.get().strip()
@@ -195,11 +191,11 @@ def aplicar_config():
         messagebox.showerror("Erro de Configuração", f"Falha ao aplicar configurações:\n\n{str(e)}")
 
 def restaurar_dhcp():
-    adaptador_raw = entry_adaptador.get()
+    adaptador_raw = seg_adaptador.get()
     adaptador = obter_nome_adaptador(adaptador_raw)
     
     if not adaptador:
-        messagebox.showwarning("Aviso", "O campo 'Nome do Adaptador' precisa estar preenchido para restaurar!")
+        messagebox.showwarning("Aviso", "Selecione o Adaptador de Rede para restaurar!")
         return
 
     try:
@@ -239,7 +235,6 @@ def abrir_control_printers():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
 
-# --- JANELA CENTRAL DE DRIVERS ---
 def abrir_janela_drivers():
     win = ctk.CTkToplevel(root)
     win.title("Central de Drivers de Impressoras")
@@ -676,7 +671,23 @@ lbl_4.pack(fill="x", padx=12, pady=(10, 4))
 entry_novo_ip = ctk.CTkEntry(frame_principal, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff", placeholder_text="Ex: 192.168.10.50")
 entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168.10.50"))
 entry_novo_ip.bind("<KeyRelease>", ao_digitar_novo_ip)
-entry_novo_ip.pack(fill="x", padx=12, pady=(0, 12))
+entry_novo_ip.pack(fill="x", padx=12, pady=(0, 8))
+
+# --- NOVO: SELEÇÃO MANUAL DO ADAPTADOR LOGO ABAIXO DO IP ---
+lbl_adaptador_sel = ctk.CTkLabel(frame_principal, text="Adaptador de Rede:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff", anchor="w")
+lbl_adaptador_sel.pack(fill="x", padx=12, pady=(4, 4))
+
+seg_adaptador = ctk.CTkSegmentedButton(
+    frame_principal,
+    values=["Cabo", "Wi-Fi"],
+    selected_color="#4752c4",
+    selected_hover_color="#3c45a5",
+    unselected_color="#1e1f22",
+    unselected_hover_color="#383a40",
+    text_color="#ffffff"
+)
+seg_adaptador.set(cache_dados.get("adaptador", "Cabo"))
+seg_adaptador.pack(fill="x", padx=12, pady=(0, 12))
 
 # --- SPOILER: CONFIGURAÇÕES AVANÇADAS ---
 spoiler_aberto = False
@@ -693,28 +704,23 @@ btn_spoiler.pack(fill="x", pady=(0, 8))
 
 frame_spoiler = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
 
-lbl_1 = ctk.CTkLabel(frame_spoiler, text="1. Adaptador (1 para Wi-Fi / 2 para Cabo):", text_color="#dcddde", anchor="w")
-lbl_1.pack(fill="x", padx=10, pady=(10, 2))
-entry_adaptador = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
-entry_adaptador.pack(fill="x", padx=10, pady=(0, 10))
-
-lbl_2 = ctk.CTkLabel(frame_spoiler, text="2. Seu IP Principal ATUAL:", text_color="#dcddde", anchor="w")
-lbl_2.pack(fill="x", padx=10, pady=(0, 2))
+lbl_2 = ctk.CTkLabel(frame_spoiler, text="1. Seu IP Principal ATUAL:", text_color="#dcddde", anchor="w")
+lbl_2.pack(fill="x", padx=10, pady=(10, 2))
 entry_ip_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
 entry_ip_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-lbl_3 = ctk.CTkLabel(frame_spoiler, text="3. Seu Gateway ATUAL:", text_color="#dcddde", anchor="w")
+lbl_3 = ctk.CTkLabel(frame_spoiler, text="2. Seu Gateway ATUAL:", text_color="#dcddde", anchor="w")
 lbl_3.pack(fill="x", padx=10, pady=(0, 2))
 entry_gw_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
 entry_gw_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-lbl_5 = ctk.CTkLabel(frame_spoiler, text="5. Máscara de sub-rede nova:", text_color="#dcddde", anchor="w")
+lbl_5 = ctk.CTkLabel(frame_spoiler, text="3. Máscara de sub-rede nova:", text_color="#dcddde", anchor="w")
 lbl_5.pack(fill="x", padx=10, pady=(0, 2))
 entry_mascara = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
 entry_mascara.insert(0, cache_dados.get("mascara", "255.255.255.0"))
 entry_mascara.pack(fill="x", padx=10, pady=(0, 10))
 
-lbl_6 = ctk.CTkLabel(frame_spoiler, text="6. NOVO Gateway secundário (Auto-preenchido):", text_color="#dcddde", anchor="w")
+lbl_6 = ctk.CTkLabel(frame_spoiler, text="4. NOVO Gateway secundário (Auto-preenchido):", text_color="#dcddde", anchor="w")
 lbl_6.pack(fill="x", padx=10, pady=(0, 2))
 entry_novo_gw = ctk.CTkEntry(frame_spoiler, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
 entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168.10.1"))
@@ -723,8 +729,7 @@ entry_novo_gw.pack(fill="x", padx=10, pady=(0, 10))
 def auto_preencher_rede_tempo_real():
     auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
     
-    entry_adaptador.delete(0, "end")
-    entry_adaptador.insert(0, auto_adaptador or cache_dados.get("adaptador", ""))
+    seg_adaptador.set(auto_adaptador or cache_dados.get("adaptador", "Cabo"))
     
     entry_ip_atual.delete(0, "end")
     entry_ip_atual.insert(0, auto_ip or cache_dados.get("ip_atual", "192.168."))
@@ -872,9 +877,9 @@ lbl_inst_titulo = ctk.CTkLabel(
 lbl_inst_titulo.pack(anchor="w", padx=12, pady=(8, 4))
 
 texto_instrucoes = (
-    "1. Insira o IP da impressora e clique em 'Aplicar Configuração'.\n"
-    "2. Abra a Central de Drivers para baixar utilitários e instaladores.\n"
-    "3. Execute o aplicativo como Administrador para alterar portas e IPs."
+    "1. Insira o IP da impressora e selecione Cabo ou Wi-Fi.\n"
+    "2. Clique em 'Aplicar Configuração de Rede'.\n"
+    "3. Use a Central de Drivers para baixar utilitários e instaladores."
 )
 
 lbl_inst_corpo = ctk.CTkLabel(
