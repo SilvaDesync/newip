@@ -70,29 +70,45 @@ def detectar_rede_automatica_cmd():
         )
         output = res.stdout
 
-        bloco_atual = None
-        for linha in output.splitlines():
-            linha_strip = linha.strip()
+        # Separa a saída do ipconfig por blocos de adaptadores
+        blocos = output.split("\n\n")
 
-            if "Adaptador" in linha or "adapter" in linha:
-                bloco_atual = linha_strip
+        for bloco in blocos:
+            linhas = [l.strip() for l in bloco.splitlines() if l.strip()]
+            if not linhas:
+                continue
 
-            elif "IPv4" in linha_strip and bloco_atual:
-                match_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha_strip)
-                if match_ip:
-                    ip_temp = match_ip.group(1)
-                    if not ip_temp.startswith("127.") and not ip_temp.startswith("169.254."):
-                        ip_atual = ip_temp
-                        if "wi-fi" in bloco_atual.lower() or "sem fio" in bloco_atual.lower() or "wireless" in bloco_atual.lower():
-                            adaptador_codigo = "1"
-                        else:
-                            adaptador_codigo = "2"
+            nome_bloco = linhas[0].lower()
+            
+            # Descarta adaptadores desconectados, virtuais ou de loopback
+            if "mídia desconectada" in nome_bloco or "media disconnected" in nome_bloco:
+                continue
 
-            elif ("Gateway Padr" in linha_strip or "Default Gateway" in linha_strip) and ip_atual:
-                match_gw = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha_strip)
-                if match_gw:
-                    gw_atual = match_gw.group(1)
-                    break
+            ip_temp = ""
+            gw_temp = ""
+
+            for linha in linhas:
+                if "IPv4" in linha:
+                    match_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha)
+                    if match_ip:
+                        ip_val = match_ip.group(1)
+                        if not ip_val.startswith("127.") and not ip_val.startswith("169.254."):
+                            ip_temp = ip_val
+
+                elif "Gateway Padr" in linha or "Default Gateway" in linha:
+                    match_gw = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', linha)
+                    if match_gw:
+                        gw_temp = match_gw.group(1)
+
+            # Só aceita o bloco se possuir IP e Gateway VÁLIDO na mesma interface
+            if ip_temp and gw_temp:
+                ip_atual = ip_temp
+                gw_atual = gw_temp
+                if "wi-fi" in nome_bloco or "sem fio" in nome_bloco or "wireless" in nome_bloco:
+                    adaptador_codigo = "1"
+                else:
+                    adaptador_codigo = "2"
+                break  # Encerra ao localizar a interface principal conectada
 
     except Exception as e:
         print(f"Erro ao auto-detectar via CMD: {e}")
