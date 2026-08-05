@@ -198,7 +198,6 @@ def abrir_control_printers():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
 
-# --- NOVA TELA: GERENCIAR IP INTERNO DA IMPRESSORA ---
 def abrir_janela_ajuste_impressora():
     win = ctk.CTkToplevel(root)
     win.title("Ajuste de IP e Gateway da Impressora")
@@ -247,11 +246,9 @@ def abrir_janela_ajuste_impressora():
         lbl_status.configure(text="🔍 Verificando comunicação...", text_color="#f0b232")
         win.update()
 
-        # Teste de Ping
         res_ping = subprocess.run(f"ping -n 1 -w 1000 {ip}", shell=True, capture_output=True)
         ping_ok = res_ping.returncode == 0
 
-        # Teste de Porta de Impressão (RAW 9100 ou HTTP 80)
         porta_ok = False
         for porta in [9100, 80, 443]:
             try:
@@ -269,7 +266,6 @@ def abrir_janela_ajuste_impressora():
             lbl_status.configure(text=f"✅ Impressora Localizada no IP {ip}!", text_color="#23a55a")
             frame_novos_dados.pack(fill="x", padx=15, pady=5)
             
-            # Preenche sugestões
             partes = ip.split(".")
             if len(partes) == 4:
                 entry_novo_gw_imp.delete(0, "end")
@@ -293,6 +289,143 @@ def abrir_janela_ajuste_impressora():
         hover_color="#1d8a4b", 
         command=lambda: abrir_web_panel(entry_ip_busca.get().strip())
     )
+
+# --- NOVA FUNCIONALIDADE: CRIAR PORTA E VINCULAR DISPOSITIVO ---
+def obter_drivers_instalados():
+    try:
+        cmd = 'powershell -Command "Get-PrinterDriver | Select-Object -ExpandProperty Name"'
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        drivers = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        return sorted(drivers) if drivers else ["Generic / Text Only"]
+    except Exception:
+        return ["Generic / Text Only"]
+
+def obter_portas_instaladas():
+    try:
+        cmd = 'powershell -Command "Get-PrinterPort | Select-Object -ExpandProperty Name"'
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        portas = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        return sorted(portas) if portas else ["LPT1:", "USB001", "COM1:"]
+    except Exception:
+        return ["LPT1:", "USB001", "COM1:"]
+
+def abrir_janela_criar_dispositivo():
+    win = ctk.CTkToplevel(root)
+    win.title("Criar Dispositivo e Gerenciar Portas")
+    win.geometry("500x580")
+    win.resizable(False, False)
+    win.configure(fg_color="#18191c")
+    win.grab_set()
+
+    scroll = ctk.CTkScrollableFrame(win, corner_radius=10, fg_color="#1e1f22")
+    scroll.pack(fill="both", expand=True, padx=12, pady=12)
+
+    # SECÇÃO 1: CADASTRAR PORTA
+    lbl_sec1 = ctk.CTkLabel(scroll, text="1. CADASTRAR NOVA PORTA (TCP/IP OU LOCAL)", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
+    lbl_sec1.pack(anchor="w", pady=(5, 10))
+
+    frame_porta = ctk.CTkFrame(scroll, fg_color="#2b2d31", corner_radius=8)
+    frame_porta.pack(fill="x", pady=(0, 15))
+
+    lbl_nome_porta = ctk.CTkLabel(frame_porta, text="Nome da Porta ou IP (Ex: 192.168.10.50 ou USB002):", text_color="#dcddde", anchor="w")
+    lbl_nome_porta.pack(fill="x", padx=10, pady=(10, 2))
+    
+    entry_nome_porta = ctk.CTkEntry(frame_porta, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff")
+    entry_nome_porta.insert(0, entry_novo_ip.get().strip())
+    entry_nome_porta.pack(fill="x", padx=10, pady=(0, 10))
+
+    tipo_porta_var = ctk.StringVar(value="TCP/IP (Rede)")
+    rb_tcp = ctk.CTkRadioButton(frame_porta, text="Porta TCP/IP (Standard RAW 9100)", variable=tipo_porta_var, value="TCP/IP (Rede)", text_color="#dcddde")
+    rb_tcp.pack(anchor="w", padx=10, pady=2)
+    
+    rb_local = ctk.CTkRadioButton(frame_porta, text="Porta Local / USB Personalizada", variable=tipo_porta_var, value="Local", text_color="#dcddde")
+    rb_local.pack(anchor="w", padx=10, pady=(0, 10))
+
+    def acao_criar_porta():
+        val = entry_nome_porta.get().strip()
+        tipo = tipo_porta_var.get()
+
+        if not val:
+            messagebox.showwarning("Aviso", "Informe o nome ou IP da porta!", parent=win)
+            return
+
+        try:
+            if tipo == "TCP/IP (Rede)":
+                cmd = f'powershell -Command "Add-PrinterPort -Name \'{val}\' -PrinterHostAddress \'{val}\' -ErrorAction Stop"'
+            else:
+                cmd = f'powershell -Command "Add-PrinterPort -Name \'{val}\' -ErrorAction Stop"'
+
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            if res.returncode == 0:
+                messagebox.showinfo("Sucesso", f"Porta '{val}' criada com sucesso!", parent=win)
+                atualizar_combos()
+            else:
+                messagebox.showerror("Erro", f"Falha ao criar porta:\n{res.stderr or res.stdout}", parent=win)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro na execução:\n{str(e)}", parent=win)
+
+    btn_add_porta = ctk.CTkButton(frame_porta, text="➕ Cadastrar Porta", fg_color="#5865f2", hover_color="#4752c4", command=acao_criar_porta)
+    btn_add_porta.pack(fill="x", padx=10, pady=(5, 10))
+
+    # SECÇÃO 2: VINCULAR DISPOSITIVO E DRIVER
+    lbl_sec2 = ctk.CTkLabel(scroll, text="2. CRIAR DISPOSITIVO E VINCULAR DRIVER", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
+    lbl_sec2.pack(anchor="w", pady=(5, 10))
+
+    frame_disp = ctk.CTkFrame(scroll, fg_color="#2b2d31", corner_radius=8)
+    frame_disp.pack(fill="x", pady=(0, 10))
+
+    lbl_nome_disp = ctk.CTkLabel(frame_disp, text="Nome da Impressora/Dispositivo:", text_color="#dcddde", anchor="w")
+    lbl_nome_disp.pack(fill="x", padx=10, pady=(10, 2))
+    entry_nome_disp = ctk.CTkEntry(frame_disp, corner_radius=8, fg_color="#1e1f22", border_color="#383a40", text_color="#ffffff", placeholder_text="Ex: Impressora Termica Caixas")
+    entry_nome_disp.pack(fill="x", padx=10, pady=(0, 10))
+
+    lbl_sel_driver = ctk.CTkLabel(frame_disp, text="Selecione o Driver Instalado:", text_color="#dcddde", anchor="w")
+    lbl_sel_driver.pack(fill="x", padx=10, pady=(0, 2))
+    combo_driver = ctk.CTkOptionMenu(frame_disp, fg_color="#1e1f22", button_color="#383a40", text_color="#ffffff")
+    combo_driver.pack(fill="x", padx=10, pady=(0, 10))
+
+    lbl_sel_porta = ctk.CTkLabel(frame_disp, text="Selecione a Porta de Saída:", text_color="#dcddde", anchor="w")
+    lbl_sel_porta.pack(fill="x", padx=10, pady=(0, 2))
+    combo_porta = ctk.CTkOptionMenu(frame_disp, fg_color="#1e1f22", button_color="#383a40", text_color="#ffffff")
+    combo_porta.pack(fill="x", padx=10, pady=(0, 10))
+
+    def atualizar_combos():
+        drivers = obter_drivers_instalados()
+        portas = obter_portas_instaladas()
+
+        combo_driver.configure(values=drivers)
+        if drivers:
+            combo_driver.set(drivers[0])
+
+        combo_porta.configure(values=portas)
+        if portas:
+            combo_porta.set(portas[0])
+
+    def acao_criar_impressora():
+        nome = entry_nome_disp.get().strip()
+        driver = combo_driver.get()
+        porta = combo_porta.get()
+
+        if not nome or not driver or not porta:
+            messagebox.showwarning("Aviso", "Preencha o nome da impressora e selecione driver e porta!", parent=win)
+            return
+
+        try:
+            cmd = f'powershell -Command "Add-Printer -Name \'{nome}\' -DriverName \'{driver}\' -PortName \'{porta}\' -ErrorAction Stop"'
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+            if res.returncode == 0:
+                messagebox.showinfo("Sucesso", f"Impressora '{nome}' criada com sucesso vinculada à porta '{porta}' e driver '{driver}'!", parent=win)
+                win.destroy()
+            else:
+                messagebox.showerror("Erro de Instalação", f"Falha ao vincular impressora:\n{res.stderr or res.stdout}", parent=win)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro na operação:\n{str(e)}", parent=win)
+
+    btn_criar_disp = ctk.CTkButton(frame_disp, text="🖨️ Criar e Vincular Impressora", fg_color="#23a55a", hover_color="#1d8a4b", height=35, command=acao_criar_impressora)
+    btn_criar_disp.pack(fill="x", padx=10, pady=(5, 12))
+
+    atualizar_combos()
 
 def escanear_impressoras_sistema():
     itens = set()
@@ -402,7 +535,7 @@ auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 # --- INTERFACE MODERNA DARK ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x610")
+root.geometry("500x660")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
@@ -480,7 +613,22 @@ btn_aplicar = ctk.CTkButton(
 )
 btn_aplicar.pack(fill="x", pady=(5, 8))
 
-# NOVO BOTÃO: GERENCIAR IMPRESSORA
+# NOVO BOTÃO: CRIAR DISPOSITIVO E PORTAS
+btn_criar_disp_janela = ctk.CTkButton(
+    frame, 
+    text="➕ Criar Dispositivo e Porta de Impressão", 
+    font=ctk.CTkFont(size=12, weight="bold"),
+    fg_color="#2b2d31", 
+    hover_color="#3b3d44", 
+    border_width=1,
+    border_color="#5865f2",
+    corner_radius=10,
+    height=38,
+    command=abrir_janela_criar_dispositivo
+)
+btn_criar_disp_janela.pack(fill="x", pady=(0, 8))
+
+# BOTÃO: GERENCIAR IMPRESSORA
 btn_ajuste_imp = ctk.CTkButton(
     frame, 
     text="🌐 Configurar IP/Gateway da Impressora", 
@@ -561,7 +709,7 @@ lbl_inst_titulo.pack(anchor="w", padx=12, pady=(10, 5))
 texto_instrucoes = (
     "1. Digite o endereço IP da impressora no campo acima.\n"
     "2. Clique em 'Aplicar Configuração' para autorizar a comunicação.\n"
-    "3. Clique em 'Configurar IP/Gateway da Impressora' para testar/acessar a impressora.\n"
+    "3. Use 'Criar Dispositivo e Porta' para cadastrar novas portas TCP/USB e vincular drivers.\n"
     "4. Use 'Reiniciar Spooler' caso a fila de impressão trave.\n"
     "5. Use 'Limpeza Total' para remover drivers antigos corrompidos."
 )
