@@ -9,7 +9,13 @@ from tkinter import messagebox
 
 CACHE_FILE = "config_cache.json"
 
-# Configuração do Tema Visual Moderno
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
@@ -86,24 +92,33 @@ def detectar_rede_automatica_cmd():
     return adaptador_codigo, ip_atual, gw_atual
 
 def ao_digitar_novo_ip(event=None):
-    """Calcula e preenche o gateway secundário terminado em .1 automaticamente"""
+    """Calcula e força o final .254 para o IP e o final .1 para o Gateway"""
     ip_texto = entry_novo_ip.get().strip()
     partes = ip_texto.split(".")
+    
     if len(partes) == 4 and all(p.isdigit() for p in partes[:3]):
+        # Se os 3 primeiros octetos forem numéricos válidos
+        ip_254 = f"{partes[0]}.{partes[1]}.{partes[2]}.254"
         gateway_auto = f"{partes[0]}.{partes[1]}.{partes[2]}.1"
+        
+        # Atualiza o campo do IP com final .254 apenas se for diferente do atual
+        if ip_texto != ip_254 and partes[3] != "254":
+            entry_novo_ip.delete(0, "end")
+            entry_novo_ip.insert(0, ip_254)
+
+        # Atualiza o Gateway com final .1
         entry_novo_gw.delete(0, "end")
         entry_novo_gw.insert(0, gateway_auto)
 
 def alternar_spoiler():
-    """Abre e fecha a seção dos campos 1, 2 e 3"""
     global spoiler_aberto
     if spoiler_aberto:
         frame_spoiler.pack_forget()
-        btn_spoiler.configure(text="▶ 🛠️ Editar Dados do Computador (Rede Atual)")
+        btn_spoiler.configure(text="▶ 🛠️ Exibir Todas as Configurações de Rede")
         spoiler_aberto = False
     else:
-        frame_spoiler.pack(fill="x", pady=(0, 15), before=lbl_sub)
-        btn_spoiler.configure(text="▼ 🛠️ Ocultar Dados do Computador")
+        frame_spoiler.pack(fill="x", pady=(0, 15), before=btn_aplicar)
+        btn_spoiler.configure(text="▼ 🛠️ Ocultar Configurações Avancadas")
         spoiler_aberto = True
 
 def aplicar_config():
@@ -170,15 +185,18 @@ def restaurar_dhcp():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao restaurar DHCP:\n{str(e)}")
 
-# Carrega cache e auto-detecta rede
 cache_dados = carregar_cache()
 auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 
 # --- INTERFACE MODERNA ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x680")
+root.geometry("500x620")
 root.resizable(False, False)
+
+icon_file = resource_path("icon.ico")
+if os.path.exists(icon_file):
+    root.iconbitmap(icon_file)
 
 frame = ctk.CTkScrollableFrame(root, corner_radius=15)
 frame.pack(fill="both", expand=True, padx=15, pady=15)
@@ -186,11 +204,20 @@ frame.pack(fill="both", expand=True, padx=15, pady=15)
 lbl_titulo = ctk.CTkLabel(frame, text="PASSO 1: CONFIGURAÇÃO DE IP + IMPRESSORA", font=ctk.CTkFont(size=14, weight="bold"))
 lbl_titulo.pack(pady=(10, 15))
 
-# Botão Spoiler/Expansível
+# --- ÚNICO CAMPO VISÍVEL DE INÍCIO (IP DA IMPRESSORA) ---
+lbl_4 = ctk.CTkLabel(frame, text="Digite o IP da Impressora (O final mudará para .254):", font=ctk.CTkFont(size=12, weight="bold"), anchor="w")
+lbl_4.pack(fill="x", pady=(0, 2))
+entry_novo_ip = ctk.CTkEntry(frame, corner_radius=10, placeholder_text="Ex: 192.168.10.50")
+entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168.10.254"))
+entry_novo_ip.bind("<FocusOut>", ao_digitar_novo_ip)
+entry_novo_ip.bind("<Return>", ao_digitar_novo_ip)
+entry_novo_ip.pack(fill="x", pady=(0, 15))
+
+# Botão Spoiler (Expansível)
 spoiler_aberto = False
 btn_spoiler = ctk.CTkButton(
     frame, 
-    text="▶ 🛠️ Editar Dados do Computador (Rede Atual)", 
+    text="▶ 🛠️ Exibir Todas as Configurações de Rede", 
     fg_color="transparent", 
     text_color=("gray10", "gray90"),
     hover_color=("gray85", "gray25"),
@@ -199,74 +226,45 @@ btn_spoiler = ctk.CTkButton(
 )
 btn_spoiler.pack(fill="x", pady=(0, 10))
 
-# Container interno do Spoiler (oculto por padrão)
+# --- CONTAINER DO SPOILER (CAMPOS RESTANTES) ---
 frame_spoiler = ctk.CTkFrame(frame, corner_radius=10, fg_color=("gray90", "gray20"))
 
-lbl_1 = ctk.CTkLabel(frame_spoiler, text="1. Wi-Fi digite 1, Cabo de rede digite 2:", anchor="w")
+# Campo 1
+lbl_1 = ctk.CTkLabel(frame_spoiler, text="1. Adaptador (1 para Wi-Fi / 2 para Cabo):", anchor="w")
 lbl_1.pack(fill="x", padx=10, pady=(10, 2))
 entry_adaptador = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_adaptador.insert(0, auto_adaptador or cache_dados.get("adaptador", ""))
 entry_adaptador.pack(fill="x", padx=10, pady=(0, 10))
 
+# Campo 2
 lbl_2 = ctk.CTkLabel(frame_spoiler, text="2. Seu IP Principal ATUAL:", anchor="w")
 lbl_2.pack(fill="x", padx=10, pady=(0, 2))
 entry_ip_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_ip_atual.insert(0, auto_ip or cache_dados.get("ip_atual", "192.168."))
 entry_ip_atual.pack(fill="x", padx=10, pady=(0, 10))
 
+# Campo 3
 lbl_3 = ctk.CTkLabel(frame_spoiler, text="3. Seu Gateway ATUAL:", anchor="w")
 lbl_3.pack(fill="x", padx=10, pady=(0, 2))
 entry_gw_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_gw_atual.insert(0, auto_gw or cache_dados.get("gw_atual", "192.168."))
 entry_gw_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-# Subtítulo Nova Rede
-lbl_sub = ctk.CTkLabel(frame, text="DADOS DA NOVA REDE (Impressora)", font=ctk.CTkFont(size=13, weight="bold"))
-lbl_sub.pack(anchor="w", pady=(0, 8))
-
-# Caixa Informativa
-texto_explicacao = (
-    "💡 IMPORTANTE (Regra de Jogo):\n"
-    "Cada aparelho na rede precisa ter um número final DIFERENTE!\n"
-    "Se o IP da impressora for 192.168.10.50, use ex: 192.168.10.51."
-)
-lbl_aviso = ctk.CTkLabel(
-    frame, 
-    text=texto_explicacao, 
-    font=ctk.CTkFont(size=11),
-    fg_color=("#FFF3CD", "#3D3200"),
-    text_color=("#856404", "#FFECB3"),
-    corner_radius=10,
-    justify="left",
-    anchor="w",
-    padx=12,
-    pady=10
-)
-lbl_aviso.pack(fill="x", pady=(0, 15))
-
-# Campo 4 (com evento de auto-completar Gateway)
-lbl_4 = ctk.CTkLabel(frame, text="4. NOVO IP secundário (ex: 192.168.10.51):", anchor="w")
-lbl_4.pack(fill="x", pady=(0, 2))
-entry_novo_ip = ctk.CTkEntry(frame, corner_radius=10)
-entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168."))
-entry_novo_ip.bind("<KeyRelease>", ao_digitar_novo_ip)
-entry_novo_ip.pack(fill="x", pady=(0, 10))
-
-# Campo 5 (Pré-preenchido com 255.255.255.0)
-lbl_5 = ctk.CTkLabel(frame, text="5. Máscara de sub-rede nova:", anchor="w")
-lbl_5.pack(fill="x", pady=(0, 2))
-entry_mascara = ctk.CTkEntry(frame, corner_radius=10)
+# Campo 5
+lbl_5 = ctk.CTkLabel(frame_spoiler, text="5. Máscara de sub-rede nova:", anchor="w")
+lbl_5.pack(fill="x", padx=10, pady=(0, 2))
+entry_mascara = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_mascara.insert(0, cache_dados.get("mascara", "255.255.255.0"))
-entry_mascara.pack(fill="x", pady=(0, 10))
+entry_mascara.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 6 (Preenchido automaticamente ao digitar no Campo 4)
-lbl_6 = ctk.CTkLabel(frame, text="6. NOVO Gateway secundário (Auto-preenchido):", anchor="w")
-lbl_6.pack(fill="x", pady=(0, 2))
-entry_novo_gw = ctk.CTkEntry(frame, corner_radius=10)
+# Campo 6
+lbl_6 = ctk.CTkLabel(frame_spoiler, text="6. NOVO Gateway secundário (Auto-preenchido):", anchor="w")
+lbl_6.pack(fill="x", padx=10, pady=(0, 2))
+entry_novo_gw = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168.10.1"))
-entry_novo_gw.pack(fill="x", pady=(0, 20))
+entry_novo_gw.pack(fill="x", padx=10, pady=(0, 10))
 
-# Botões
+# Botões de Ação Principais
 btn_aplicar = ctk.CTkButton(
     frame, 
     text="Aplicar Configuração", 
@@ -277,7 +275,7 @@ btn_aplicar = ctk.CTkButton(
     height=40,
     command=aplicar_config
 )
-btn_aplicar.pack(fill="x", pady=(0, 10))
+btn_aplicar.pack(fill="x", pady=(10, 10))
 
 btn_restaurar = ctk.CTkButton(
     frame, 
