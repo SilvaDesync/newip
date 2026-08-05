@@ -4,6 +4,7 @@ import subprocess
 import json
 import os
 import re
+import winreg
 import customtkinter as ctk
 from tkinter import messagebox
 
@@ -46,7 +47,7 @@ def salvar_cache(dados):
         print(f"Erro ao salvar cache: {e}")
 
 def obter_nome_adaptador(valor):
-    valor = valor.strip()
+    valor = str(valor).strip()
     if valor == "1":
         return "Wi-Fi"
     elif valor == "2":
@@ -92,21 +93,11 @@ def detectar_rede_automatica_cmd():
     return adaptador_codigo, ip_atual, gw_atual
 
 def ao_digitar_novo_ip(event=None):
-    """Calcula e força o final .254 para o IP e o final .1 para o Gateway"""
     ip_texto = entry_novo_ip.get().strip()
     partes = ip_texto.split(".")
     
     if len(partes) == 4 and all(p.isdigit() for p in partes[:3]):
-        # Se os 3 primeiros octetos forem numéricos válidos
-        ip_254 = f"{partes[0]}.{partes[1]}.{partes[2]}.254"
         gateway_auto = f"{partes[0]}.{partes[1]}.{partes[2]}.1"
-        
-        # Atualiza o campo do IP com final .254 apenas se for diferente do atual
-        if ip_texto != ip_254 and partes[3] != "254":
-            entry_novo_ip.delete(0, "end")
-            entry_novo_ip.insert(0, ip_254)
-
-        # Atualiza o Gateway com final .1
         entry_novo_gw.delete(0, "end")
         entry_novo_gw.insert(0, gateway_auto)
 
@@ -118,7 +109,7 @@ def alternar_spoiler():
         spoiler_aberto = False
     else:
         frame_spoiler.pack(fill="x", pady=(0, 15), before=btn_aplicar)
-        btn_spoiler.configure(text="▼ 🛠️ Ocultar Configurações Avancadas")
+        btn_spoiler.configure(text="▼ 🛠️ Ocultar Configurações Avançadas")
         spoiler_aberto = True
 
 def aplicar_config():
@@ -127,19 +118,25 @@ def aplicar_config():
     
     ip_atual = entry_ip_atual.get().strip()
     gw_atual = entry_gw_atual.get().strip()
-    novo_ip = entry_novo_ip.get().strip()
+    novo_ip_digitado = entry_novo_ip.get().strip()
     mascara = entry_mascara.get().strip()
     novo_gw = entry_novo_gw.get().strip()
 
-    if not all([adaptador, ip_atual, gw_atual, novo_ip, mascara, novo_gw]):
+    if not all([adaptador, ip_atual, gw_atual, novo_ip_digitado, mascara, novo_gw]):
         messagebox.showwarning("Aviso", "Por favor, preencha todos os campos!")
         return
+
+    partes_ip = novo_ip_digitado.split(".")
+    if len(partes_ip) == 4 and all(p.isdigit() for p in partes_ip[:3]):
+        novo_ip_real = f"{partes_ip[0]}.{partes_ip[1]}.{partes_ip[2]}.254"
+    else:
+        novo_ip_real = novo_ip_digitado
 
     dados_para_salvar = {
         "adaptador": adaptador_raw,
         "ip_atual": ip_atual,
         "gw_atual": gw_atual,
-        "novo_ip": novo_ip,
+        "novo_ip": novo_ip_digitado,
         "mascara": mascara,
         "novo_gw": novo_gw
     }
@@ -151,7 +148,7 @@ def aplicar_config():
         if res1.returncode != 0:
             raise Exception(f"Passo 1 (Fixar IP):\n{res1.stderr or res1.stdout}")
 
-        cmd2 = f'netsh interface ipv4 add address name="{adaptador}" {novo_ip} {mascara}'
+        cmd2 = f'netsh interface ipv4 add address name="{adaptador}" {novo_ip_real} {mascara}'
         res2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
         if res2.returncode != 0:
             raise Exception(f"Passo 2 (Adicionar IP):\n{res2.stderr or res2.stdout}")
@@ -185,13 +182,123 @@ def restaurar_dhcp():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao restaurar DHCP:\n{str(e)}")
 
+# --- FUNCIONALIDADES DE LIMPEZA TOTAL DE IMPRESSORAS ---
+def escanear_impressoras_sistema():
+    itens = set()
+    chaves = [
+        r"SYSTEM\CurrentControlSet\Control\Print\Printers",
+        r"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3",
+        r"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-4"
+    ]
+    for subkey in chaves:
+        try:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey, 0, winreg.KEY_READ)
+            count = winreg.QueryInfoKey(key)[0]
+            for i in range(count):
+                itens.add(winreg.EnumKey(key, i))
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+    return sorted(list(itens))
+
+def executar_limpeza_item(target):
+    # 1. Remove do Painel de Controle
+    subprocess.run(f'powershell -Command "Remove-Printer -Name \'{target}\' -ErrorAction SilentlyContinue"', shell=True)
+    subprocess.run(f'rundll32 printui.dll,PrintUIEntry /dl /n "{target}" /q', shell=True)
+    
+    # 2. Para Spooler
+    subprocess.run('net stop spooler', shell=True)
+    
+    # 3. Backup
+    subprocess.run('reg export "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print" "C:\\BackupPrint.reg" /y', shell=True)
+    
+    # 4. Limpeza no Registro
+    reg_paths = [
+        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Printers\\{target}',
+        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows x64\\Drivers\\Version-3\\{target}',
+        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows x64\\Drivers\\Version-4\\{target}',
+        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows NT x86\\Drivers\\Version-3\\{target}',
+        f'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Environments\\Windows NT x86\\Drivers\\Version-4\\{target}'
+    ]
+    for path in reg_paths:
+        subprocess.run(f'reg delete "{path}" /f', shell=True)
+
+    # 5 & 6. Limpeza de Softwares e Pastas do Fabricante via PowerShell
+    vendor = target.split(' ')[0].replace('-', '')
+    ps_cmd_uninstall = (
+        f"$vendor = '{vendor}';"
+        f"Get-ChildItem -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | "
+        f"Get-ItemProperty | Where-Object {{ $_.DisplayName -like \"*$vendor*\" -or $_.DisplayName -like \"*{target}*\" -or $_.DisplayName -like '*APD*' -or $_.DisplayName -like '*POS Printer*' }} | "
+        f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+    )
+    subprocess.run(f'powershell -Command "{ps_cmd_uninstall}"', shell=True)
+
+    ps_cmd_folders = (
+        f"$vendor = '{vendor}';"
+        f"Remove-Item -Path \"HKLM:\\SOFTWARE\\$vendor\", \"HKLM:\\SOFTWARE\\WOW6432Node\\$vendor\", 'HKLM:\\SOFTWARE\\EPSON', 'HKLM:\\SOFTWARE\\WOW6432Node\\EPSON', 'HKLM:\\SOFTWARE\\POS Printer Driver' -Recurse -Force -ErrorAction SilentlyContinue;"
+        f"Remove-Item -Path \"C:\\*$vendor*\", 'C:\\POS Printer Driver*', 'C:\\Program Files\\POS Printer Driver*', 'C:\\Program Files (x86)\\POS Printer Driver*' -Recurse -Force -ErrorAction SilentlyContinue"
+    )
+    subprocess.run(f'powershell -Command "{ps_cmd_folders}"', shell=True)
+
+    # 7. Limpeza de Fila e Spooler
+    subprocess.run('del /Q /F /S "%systemroot%\\System32\\spool\\PRINTERS\\*.*"', shell=True)
+    subprocess.run('net start spooler', shell=True)
+
+def abrir_janela_limpeza():
+    itens = escanear_impressoras_sistema()
+    if not itens:
+        messagebox.showinfo("Limpeza de Impressoras", "Nenhuma impressora ou driver foi encontrado no sistema.")
+        return
+
+    win = ctk.CTkToplevel(root)
+    win.title("Limpeza Total de Impressoras e Drivers")
+    win.geometry("450x500")
+    win.resizable(False, False)
+    win.grab_set()
+
+    lbl = ctk.CTkLabel(win, text="Selecione o item para remover completamente:", font=ctk.CTkFont(size=12, weight="bold"))
+    lbl.pack(pady=10)
+
+    scroll = ctk.CTkScrollableFrame(win, corner_radius=10)
+    scroll.pack(fill="both", expand=True, padx=15, pady=(0, 10))
+
+    var_selecionado = ctk.StringVar(value="")
+
+    for item in itens:
+        rb = ctk.CTkRadioButton(scroll, text=item, variable=var_selecionado, value=item)
+        rb.pack(anchor="w", pady=5, padx=5)
+
+    def confirmar_remover_um():
+        alvo = var_selecionado.get()
+        if not alvo:
+            messagebox.showwarning("Aviso", "Selecione uma impressora ou driver para remover!")
+            return
+        if messagebox.askyesno("Confirmar Remocao", f"Tem certeza que deseja remover completamente o item:\n\n{alvo}?"):
+            executar_limpeza_item(alvo)
+            messagebox.showinfo("Sucesso", f"Item '{alvo}' e todos os seus rastros foram removidos!")
+            win.destroy()
+
+    def confirmar_remover_todos():
+        if messagebox.askyesno("ATENCAO", "Tem certeza que deseja apagar TODOS os drivers, impressoras e programas de impressão do sistema?"):
+            for item in itens:
+                executar_limpeza_item(item)
+            messagebox.showinfo("Sucesso", "Todos os itens de impressão foram removidos com sucesso!")
+            win.destroy()
+
+    btn_um = ctk.CTkButton(win, text="Remover Selecionado", fg_color="#e67e22", hover_color="#d35400", command=confirmar_remover_um)
+    btn_um.pack(fill="x", padx=15, pady=(0, 5))
+
+    btn_todos = ctk.CTkButton(win, text="[ EXCLUIR TODOS OS ITENS ]", fg_color="#c0392b", hover_color="#a93226", command=confirmar_remover_todos)
+    btn_todos.pack(fill="x", padx=15, pady=(0, 15))
+
+
 cache_dados = carregar_cache()
 auto_adaptador, auto_ip, auto_gw = detectar_rede_automatica_cmd()
 
 # --- INTERFACE MODERNA ---
 root = ctk.CTk()
 root.title("Configurador de Rede - Fluxo Contínuo")
-root.geometry("500x620")
+root.geometry("500x720")
 root.resizable(False, False)
 
 icon_file = resource_path("icon.ico")
@@ -204,16 +311,13 @@ frame.pack(fill="both", expand=True, padx=15, pady=15)
 lbl_titulo = ctk.CTkLabel(frame, text="PASSO 1: CONFIGURAÇÃO DE IP + IMPRESSORA", font=ctk.CTkFont(size=14, weight="bold"))
 lbl_titulo.pack(pady=(10, 15))
 
-# --- ÚNICO CAMPO VISÍVEL DE INÍCIO (IP DA IMPRESSORA) ---
-lbl_4 = ctk.CTkLabel(frame, text="Digite o IP da Impressora (O final mudará para .254):", font=ctk.CTkFont(size=12, weight="bold"), anchor="w")
+lbl_4 = ctk.CTkLabel(frame, text="Digite o IP da Impressora:", font=ctk.CTkFont(size=12, weight="bold"), anchor="w")
 lbl_4.pack(fill="x", pady=(0, 2))
 entry_novo_ip = ctk.CTkEntry(frame, corner_radius=10, placeholder_text="Ex: 192.168.10.50")
-entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168.10.254"))
-entry_novo_ip.bind("<FocusOut>", ao_digitar_novo_ip)
-entry_novo_ip.bind("<Return>", ao_digitar_novo_ip)
+entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168.10.50"))
+entry_novo_ip.bind("<KeyRelease>", ao_digitar_novo_ip)
 entry_novo_ip.pack(fill="x", pady=(0, 15))
 
-# Botão Spoiler (Expansível)
 spoiler_aberto = False
 btn_spoiler = ctk.CTkButton(
     frame, 
@@ -226,45 +330,39 @@ btn_spoiler = ctk.CTkButton(
 )
 btn_spoiler.pack(fill="x", pady=(0, 10))
 
-# --- CONTAINER DO SPOILER (CAMPOS RESTANTES) ---
 frame_spoiler = ctk.CTkFrame(frame, corner_radius=10, fg_color=("gray90", "gray20"))
 
-# Campo 1
 lbl_1 = ctk.CTkLabel(frame_spoiler, text="1. Adaptador (1 para Wi-Fi / 2 para Cabo):", anchor="w")
 lbl_1.pack(fill="x", padx=10, pady=(10, 2))
 entry_adaptador = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_adaptador.insert(0, auto_adaptador or cache_dados.get("adaptador", ""))
 entry_adaptador.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 2
 lbl_2 = ctk.CTkLabel(frame_spoiler, text="2. Seu IP Principal ATUAL:", anchor="w")
 lbl_2.pack(fill="x", padx=10, pady=(0, 2))
 entry_ip_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_ip_atual.insert(0, auto_ip or cache_dados.get("ip_atual", "192.168."))
 entry_ip_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 3
 lbl_3 = ctk.CTkLabel(frame_spoiler, text="3. Seu Gateway ATUAL:", anchor="w")
 lbl_3.pack(fill="x", padx=10, pady=(0, 2))
 entry_gw_atual = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_gw_atual.insert(0, auto_gw or cache_dados.get("gw_atual", "192.168."))
 entry_gw_atual.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 5
 lbl_5 = ctk.CTkLabel(frame_spoiler, text="5. Máscara de sub-rede nova:", anchor="w")
 lbl_5.pack(fill="x", padx=10, pady=(0, 2))
 entry_mascara = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_mascara.insert(0, cache_dados.get("mascara", "255.255.255.0"))
 entry_mascara.pack(fill="x", padx=10, pady=(0, 10))
 
-# Campo 6
 lbl_6 = ctk.CTkLabel(frame_spoiler, text="6. NOVO Gateway secundário (Auto-preenchido):", anchor="w")
 lbl_6.pack(fill="x", padx=10, pady=(0, 2))
 entry_novo_gw = ctk.CTkEntry(frame_spoiler, corner_radius=8)
 entry_novo_gw.insert(0, cache_dados.get("novo_gw", "192.168.10.1"))
 entry_novo_gw.pack(fill="x", padx=10, pady=(0, 10))
 
-# Botões de Ação Principais
+# BOTÕES DE AÇÃO
 btn_aplicar = ctk.CTkButton(
     frame, 
     text="Aplicar Configuração", 
@@ -275,7 +373,19 @@ btn_aplicar = ctk.CTkButton(
     height=40,
     command=aplicar_config
 )
-btn_aplicar.pack(fill="x", pady=(10, 10))
+btn_aplicar.pack(fill="x", pady=(10, 8))
+
+btn_limpeza = ctk.CTkButton(
+    frame, 
+    text="🧹 Limpeza Total de Impressoras e Drivers", 
+    font=ctk.CTkFont(size=12, weight="bold"),
+    fg_color="#f39c12", 
+    hover_color="#d68910", 
+    corner_radius=12,
+    height=40,
+    command=abrir_janela_limpeza
+)
+btn_limpeza.pack(fill="x", pady=(0, 8))
 
 btn_restaurar = ctk.CTkButton(
     frame, 
@@ -287,6 +397,34 @@ btn_restaurar = ctk.CTkButton(
     height=40,
     command=restaurar_dhcp
 )
-btn_restaurar.pack(fill="x", pady=(0, 10))
+btn_restaurar.pack(fill="x", pady=(0, 15))
+
+# PAINEL DE INSTRUÇÕES
+frame_instrucoes = ctk.CTkFrame(frame, corner_radius=10, fg_color=("gray85", "gray25"))
+frame_instrucoes.pack(fill="x", pady=(0, 10))
+
+lbl_inst_titulo = ctk.CTkLabel(
+    frame_instrucoes, 
+    text="📌 INSTRUÇÕES E DICAS DE USO", 
+    font=ctk.CTkFont(size=12, weight="bold")
+)
+lbl_inst_titulo.pack(anchor="w", padx=12, pady=(10, 5))
+
+texto_instrucoes = (
+    "1. Digite o endereço IP da impressora no campo acima.\n"
+    "2. Clique em 'Aplicar Configuração' para autorizar a comunicação.\n"
+    "3. Use 'Limpeza Total' para remover drivers antigos corrompidos[cite: 2].\n"
+    "4. Se mudar de rede Wi-Fi/Cabo, clique em 'Restaurar DHCP (Sair)'.\n"
+    "5. Expanda as configurações avançadas caso precise de ajustes manuais."
+)
+
+lbl_inst_corpo = ctk.CTkLabel(
+    frame_instrucoes, 
+    text=texto_instrucoes, 
+    font=ctk.CTkFont(size=11),
+    justify="left",
+    anchor="w"
+)
+lbl_inst_corpo.pack(fill="x", padx=12, pady=(0, 10))
 
 root.mainloop()
