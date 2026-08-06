@@ -9,6 +9,7 @@ import threading
 import webbrowser
 import customtkinter as ctk
 from tkinter import messagebox
+from PIL import Image  # Necessário para carregar o logotipo na interface
 
 CACHE_FILE = "config_cache.json"
 
@@ -242,7 +243,6 @@ def abrir_janela_drivers():
     win.geometry("580x680")
     win.resizable(False, False)
     win.configure(fg_color="#18191c")
-    win.grab_set()
 
     lbl_titulo_drv = ctk.CTkLabel(win, text="DOWNLOADS DE DRIVERS E UTILITÁRIOS", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff")
     lbl_titulo_drv.pack(pady=(15, 10))
@@ -355,7 +355,6 @@ def abrir_janela_ajuste_impressora():
     win.geometry("450x480")
     win.resizable(False, False)
     win.configure(fg_color="#18191c")
-    win.grab_set()
 
     lbl_titulo = ctk.CTkLabel(win, text="DIAGNOSTICAR & APLICAR NOVO IP NA IMPRESSORA", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
     lbl_titulo.pack(pady=(15, 10))
@@ -463,7 +462,6 @@ def abrir_janela_criar_dispositivo():
     win.geometry("500x580")
     win.resizable(False, False)
     win.configure(fg_color="#18191c")
-    win.grab_set()
 
     scroll = ctk.CTkScrollableFrame(win, corner_radius=10, fg_color="#1e1f22")
     scroll.pack(fill="both", expand=True, padx=12, pady=12)
@@ -606,7 +604,6 @@ def abrir_janela_limpeza():
     win.geometry("450x450")
     win.resizable(False, False)
     win.configure(fg_color="#18191c")
-    win.grab_set()
 
     lbl = ctk.CTkLabel(win, text="Selecione o item para remover completamente:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
     lbl.pack(pady=10)
@@ -643,9 +640,7 @@ def abrir_janela_limpeza():
     btn_todos = ctk.CTkButton(win, text="[ EXCLUIR TODOS OS ITENS ]", fg_color="#f23f43", hover_color="#d03135", command=confirmar_remover_todos)
     btn_todos.pack(fill="x", padx=15, pady=(0, 15))
 
-# --- NOVO: BUSCA DE IMPRESSORAS E DISPOSITIVOS NÃO ESPECIFICADOS DO WINDOWS ---
 def obter_impressoras_sistema_detalhadas():
-    """Consulta todas as impressoras e dispositivos cadastrados no Windows via PowerShell."""
     cmd = "Get-Printer | Select-Object Name, PortName, DriverName, Default, PrinterStatus | ConvertTo-Json"
     res = executar_ps(cmd)
     if res.returncode == 0 and res.stdout.strip():
@@ -658,14 +653,12 @@ def obter_impressoras_sistema_detalhadas():
             return []
     return []
 
-# --- VARREDURA COMPLETA (IP REDE + DISPOSITIVOS NÃO ESPECIFICADOS) ---
 def abrir_janela_varredura_impressoras():
     win = ctk.CTkToplevel(root)
     win.title("Varredura de Impressoras e Não Especificados")
     win.geometry("520x520")
     win.resizable(False, False)
     win.configure(fg_color="#18191c")
-    win.grab_set()
 
     lbl_titulo = ctk.CTkLabel(win, text="VARREDURA DE IMPRESSORAS E DISPOSITIVOS", font=ctk.CTkFont(size=13, weight="bold"), text_color="#ffffff")
     lbl_titulo.pack(pady=(15, 2))
@@ -697,7 +690,6 @@ def abrir_janela_varredura_impressoras():
         for widget in scroll_resultados.winfo_children():
             widget.destroy()
 
-        # 1. BUSCAR IMPRESSORAS DO WINDOWS / NÃO ESPECIFICADAS
         impressoras_win = obter_impressoras_sistema_detalhadas()
         
         if impressoras_win:
@@ -716,7 +708,6 @@ def abrir_janela_varredura_impressoras():
                 lbl_nome = ctk.CTkLabel(frame_item, text=f"🖨️ {nome}{txt_default}\n📍 Porta: {porta}", font=ctk.CTkFont(size=11), text_color="#ffffff", justify="left", anchor="w")
                 lbl_nome.pack(side="left", padx=10, pady=6)
 
-                # Se a porta for um IP, permite selecionar diretamente
                 if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', porta):
                     def selecionar_ip_win(ip_sel=porta):
                         entry_novo_ip.delete(0, "end")
@@ -727,7 +718,6 @@ def abrir_janela_varredura_impressoras():
                     btn_usar_ip = ctk.CTkButton(frame_item, text="Usar IP", font=ctk.CTkFont(size=11), fg_color="#23a55a", hover_color="#1d8a4b", width=70, height=26, command=selecionar_ip_win)
                     btn_usar_ip.pack(side="right", padx=10, pady=5)
 
-        # 2. VARREDURA DE REDE (TCP/IP)
         lbl_cat_rede = ctk.CTkLabel(scroll_resultados, text="🌐 IMPRESSORAS ENCONTRADAS NA REDE LOCAL (RAW / PORTA 9100)", font=ctk.CTkFont(size=11, weight="bold"), text_color="#23a55a", anchor="w")
         lbl_cat_rede.pack(fill="x", padx=5, pady=(15, 5))
 
@@ -787,10 +777,11 @@ cache_dados = carregar_cache()
 
 root = ctk.CTk()
 root.title("Configurador de Rede e Impressoras")
-root.geometry("520x800")
+root.geometry("520x840")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
+# Define o ícone da barra de título do aplicativo
 icon_file = resource_path("icon.ico")
 if os.path.exists(icon_file):
     root.iconbitmap(icon_file)
@@ -798,7 +789,16 @@ if os.path.exists(icon_file):
 frame = ctk.CTkScrollableFrame(root, corner_radius=15, fg_color="#1e1f22")
 frame.pack(fill="both", expand=True, padx=12, pady=12)
 
-# --- CABEÇALHO ---
+# --- CABEÇALHO COM LOGOTIPO ---
+if os.path.exists(icon_file):
+    try:
+        pil_image = Image.open(icon_file)
+        logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(80, 80))
+        lbl_logo = ctk.CTkLabel(frame, image=logo_image, text="")
+        lbl_logo.pack(pady=(10, 0))
+    except Exception as e:
+        print(f"Erro ao carregar logo na interface: {e}")
+
 lbl_titulo = ctk.CTkLabel(frame, text="PAINEL DE CONFIGURAÇÃO DE REDE", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff")
 lbl_titulo.pack(pady=(10, 12))
 
@@ -993,7 +993,6 @@ btn_limpeza = ctk.CTkButton(
 )
 btn_limpeza.pack(fill="x", pady=(0, 8))
 
-# --- BOTÃO DE VARREDURA DE IMPRESSORAS E DISPOSITIVOS NÃO ESPECIFICADOS ---
 btn_varredura_rede = ctk.CTkButton(
     frame, 
     text="🔍 Varrer Dispositivos e Rede (IP / Não Especificados)", 
