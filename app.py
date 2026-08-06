@@ -7,9 +7,13 @@ import winreg
 import socket
 import threading
 import webbrowser
+import math
+import time
 import customtkinter as ctk
 from tkinter import messagebox
-from PIL import Image  # Necessário para carregar o logotipo na interface
+from PIL import Image
+import pygetwindow as gw
+import pyautogui
 
 CACHE_FILE = "config_cache.json"
 
@@ -236,6 +240,74 @@ def abrir_control_printers():
         subprocess.Popen("explorer.exe shell:::{A8A91A66-3A7D-4424-8D24-04E180695C7A}")
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
+
+# --- FUNÇÃO PARA ORGANIZAR JANELAS EM GRADE ---
+def organizar_janelas_grade():
+    win_grad = ctk.CTkToplevel(root)
+    win_grad.title("Organizar Janelas em Grade")
+    win_grad.geometry("450x380")
+    win_grad.resizable(False, False)
+    win_grad.configure(fg_color="#18191c")
+
+    lbl_t = ctk.CTkLabel(win_grad, text="ORGANIZADOR DE JANELAS EM GRADE", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
+    lbl_t.pack(pady=(15, 5))
+
+    lbl_desc = ctk.CTkLabel(win_grad, text="Digite os títulos (ou parte deles) das janelas que deseja alinhar,\nseparados por vírgula:", text_color="#949ba4", font=ctk.CTkFont(size=11))
+    lbl_desc.pack(pady=(0, 10))
+
+    entry_titulos = ctk.CTkEntry(win_grad, corner_radius=8, fg_color="#2b2d31", border_color="#383a40", text_color="#ffffff", placeholder_text="Ex: Chrome, Bloco de Notas, Visual Studio Code")
+    entry_titulos.insert(0, "Chrome, Bloco de Notas, Calculadora")
+    entry_titulos.pack(fill="x", padx=20, pady=(0, 15))
+
+    lbl_log = ctk.CTkLabel(win_grad, text="", font=ctk.CTkFont(size=11), text_color="#23a55a")
+    lbl_log.pack(pady=5)
+
+    def executar_alinhamento():
+        texto = entry_titulos.get().strip()
+        if not texto:
+            messagebox.showwarning("Aviso", "Informe ao menos um título de janela!", parent=win_grad)
+            return
+
+        titulos = [t.strip() for t in texto.split(",") if t.strip()]
+        
+        largura_tela, altura_tela = pyautogui.size()
+        janelas_encontradas = []
+
+        for t in titulos:
+            matches = gw.getWindowsWithTitle(t)
+            if matches:
+                janelas_encontradas.append(matches[0])
+
+        num_janelas = len(janelas_encontradas)
+        if num_janelas == 0:
+            lbl_log.configure(text="❌ Nenhuma janela correspondente foi encontrada.", text_color="#f23f43")
+            return
+
+        colunas = math.ceil(math.sqrt(num_janelas))
+        linhas = math.ceil(num_janelas / colunas)
+
+        largura_celula = largura_tela // colunas
+        altura_celula = altura_tela // linhas
+
+        for idx, janela in enumerate(janelas_encontradas):
+            col = idx % colunas
+            lin = idx // colunas
+
+            x = col * largura_celula
+            y = lin * altura_celula
+
+            try:
+                if janela.isMinimized:
+                    janela.restore()
+                janela.moveTo(x, y)
+                janela.resizeTo(largura_celula, altura_celula)
+            except Exception as e:
+                print(f"Erro ao mover janela: {e}")
+
+        lbl_log.configure(text=f"✅ {num_janelas} janela(s) organizadas em grade {colunas}x{linhas}!", text_color="#23a55a")
+
+    btn_exec = ctk.CTkButton(win_grad, text="📐 Aplicar Grade Agora", font=ctk.CTkFont(size=12, weight="bold"), fg_color="#23a55a", hover_color="#1d8a4b", height=38, command=executar_alinhamento)
+    btn_exec.pack(fill="x", padx=20, pady=(10, 15))
 
 def abrir_janela_drivers():
     win = ctk.CTkToplevel(root)
@@ -777,17 +849,35 @@ cache_dados = carregar_cache()
 
 root = ctk.CTk()
 root.title("Configurador de Rede e Impressoras")
-root.geometry("520x840")
+root.geometry("520x880")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
-# Define o ícone da barra de título do aplicativo
+# --- BARRA SUPERIOR MINÚSCULA PARA BOTÃO DISCRETO ---
+frame_top_bar = ctk.CTkFrame(root, fg_color="transparent", height=24)
+frame_top_bar.pack(fill="x", padx=12, pady=(6, 0))
+
+# Botão minúsculo [ ] no canto superior direito para organizar janelas
+btn_grid_top = ctk.CTkButton(
+    frame_top_bar,
+    text="[ ]",
+    width=28,
+    height=22,
+    font=ctk.CTkFont(size=11, weight="bold"),
+    fg_color="#2b2d31",
+    hover_color="#3b3d44",
+    text_color="#949ba4",
+    corner_radius=4,
+    command=organizar_janelas_grade
+)
+btn_grid_top.pack(side="right")
+
 icon_file = resource_path("icon.ico")
 if os.path.exists(icon_file):
     root.iconbitmap(icon_file)
 
 frame = ctk.CTkScrollableFrame(root, corner_radius=15, fg_color="#1e1f22")
-frame.pack(fill="both", expand=True, padx=12, pady=12)
+frame.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
 # --- CABEÇALHO COM LOGOTIPO ---
 if os.path.exists(icon_file):
@@ -945,7 +1035,7 @@ btn_ajuste_imp.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
 # --- BLOCO: FERRAMENTAS DO SISTEMA ---
 frame_duplo = ctk.CTkFrame(frame, fg_color="transparent")
-frame_duplo.pack(fill="x", pady=(0, 10))
+frame_duplo.pack(fill="x", pady=(0, 8))
 
 btn_spooler = ctk.CTkButton(
     frame_duplo, 
@@ -1034,7 +1124,7 @@ lbl_inst_titulo.pack(anchor="w", padx=12, pady=(8, 4))
 texto_instrucoes = (
     "1. Insira o IP da impressora e selecione Cabo ou Wi-Fi.\n"
     "2. Clique em 'Aplicar Configuração de Rede'.\n"
-    "3. Use a Central de Drivers para baixar utilitários e instaladores."
+    "3. Use o ícone [ ] no topo direito para alinhar janelas na tela."
 )
 
 lbl_inst_corpo = ctk.CTkLabel(
