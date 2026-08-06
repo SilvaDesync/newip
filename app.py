@@ -9,9 +9,9 @@ import threading
 import webbrowser
 import math
 import time
+import tkinter as tk
 import customtkinter as ctk
 from tkinter import messagebox
-from PIL import Image
 import pygetwindow as gw
 import pyautogui
 
@@ -241,7 +241,6 @@ def abrir_control_printers():
     except Exception as e:
         messagebox.showerror("Erro", f"Falha ao abrir Dispositivos e Impressoras:\n{str(e)}")
 
-# --- FUNÇÃO PARA ORGANIZAR JANELAS EM GRADE ---
 def organizar_janelas_grade():
     win_grad = ctk.CTkToplevel(root)
     win_grad.title("Organizar Janelas em Grade")
@@ -853,11 +852,9 @@ root.geometry("520x880")
 root.resizable(False, False)
 root.configure(fg_color="#18191c")
 
-# --- BARRA SUPERIOR MINÚSCULA PARA BOTÃO DISCRETO ---
 frame_top_bar = ctk.CTkFrame(root, fg_color="transparent", height=24)
 frame_top_bar.pack(fill="x", padx=12, pady=(6, 0))
 
-# Botão minúsculo [ ] no canto superior direito para organizar janelas
 btn_grid_top = ctk.CTkButton(
     frame_top_bar,
     text="[ ]",
@@ -879,12 +876,13 @@ if os.path.exists(icon_file):
 frame = ctk.CTkScrollableFrame(root, corner_radius=15, fg_color="#1e1f22")
 frame.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
-# --- CABEÇALHO COM LOGOTIPO ---
-if os.path.exists(icon_file):
+# --- CABEÇALHO COM LOGOTIPO (SEM PIL / PILLOW) ---
+png_file = resource_path("icon.png")
+if os.path.exists(png_file):
     try:
-        pil_image = Image.open(icon_file)
-        logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(80, 80))
+        logo_image = tk.PhotoImage(file=png_file)
         lbl_logo = ctk.CTkLabel(frame, image=logo_image, text="")
+        lbl_logo.image = logo_image
         lbl_logo.pack(pady=(10, 0))
     except Exception as e:
         print(f"Erro ao carregar logo na interface: {e}")
@@ -892,7 +890,6 @@ if os.path.exists(icon_file):
 lbl_titulo = ctk.CTkLabel(frame, text="PAINEL DE CONFIGURAÇÃO DE REDE", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff")
 lbl_titulo.pack(pady=(10, 12))
 
-# --- SEÇÃO: ENTRADA PRINCIPAL ---
 frame_principal = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
 frame_principal.pack(fill="x", pady=(0, 10), padx=5)
 
@@ -904,7 +901,6 @@ entry_novo_ip.insert(0, cache_dados.get("novo_ip", "192.168.10.50"))
 entry_novo_ip.bind("<KeyRelease>", ao_digitar_novo_ip)
 entry_novo_ip.pack(fill="x", padx=12, pady=(0, 8))
 
-# --- SELEÇÃO MANUAL DO ADAPTADOR ---
 lbl_adaptador_sel = ctk.CTkLabel(frame_principal, text="Adaptador de Rede:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff", anchor="w")
 lbl_adaptador_sel.pack(fill="x", padx=12, pady=(4, 4))
 
@@ -920,7 +916,6 @@ seg_adaptador = ctk.CTkSegmentedButton(
 seg_adaptador.set(cache_dados.get("adaptador", "Cabo"))
 seg_adaptador.pack(fill="x", padx=12, pady=(0, 12))
 
-# --- SPOILER: CONFIGURAÇÕES AVANÇADAS ---
 spoiler_aberto = False
 btn_spoiler = ctk.CTkButton(
     frame, 
@@ -970,7 +965,6 @@ def auto_preencher_rede_tempo_real():
 
 auto_preencher_rede_tempo_real()
 
-# --- BLOCO: AÇÕES DE REDE ---
 frame_acoes_rede = ctk.CTkFrame(frame, corner_radius=10, fg_color="transparent")
 frame_acoes_rede.pack(fill="x", pady=(0, 10))
 
@@ -986,7 +980,6 @@ btn_aplicar = ctk.CTkButton(
 )
 btn_aplicar.pack(fill="x")
 
-# --- BLOCO: GERENCIAMENTO DE IMPRESSORAS ---
 lbl_sub_imp = ctk.CTkLabel(frame, text="GERENCIAMENTO E DISPOSITIVOS", font=ctk.CTkFont(size=11, weight="bold"), text_color="#949ba4", anchor="w")
 lbl_sub_imp.pack(fill="x", padx=5, pady=(5, 5))
 
@@ -1033,7 +1026,6 @@ btn_ajuste_imp = ctk.CTkButton(
 )
 btn_ajuste_imp.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
-# --- BLOCO: FERRAMENTAS DO SISTEMA ---
 frame_duplo = ctk.CTkFrame(frame, fg_color="transparent")
 frame_duplo.pack(fill="x", pady=(0, 8))
 
@@ -1065,7 +1057,6 @@ btn_control = ctk.CTkButton(
 )
 btn_control.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
-# --- BLOCO: MANUTENÇÃO E RESTAURAÇÃO ---
 lbl_sub_manut = ctk.CTkLabel(frame, text="MANUTENÇÃO E RESTAURAÇÃO", font=ctk.CTkFont(size=11, weight="bold"), text_color="#949ba4", anchor="w")
 lbl_sub_manut.pack(fill="x", padx=5, pady=(5, 5))
 
@@ -1109,7 +1100,6 @@ btn_restaurar = ctk.CTkButton(
 )
 btn_restaurar.pack(fill="x", pady=(0, 12))
 
-# --- INSTRUÇÕES E RODAPÉ ---
 frame_instrucoes = ctk.CTkFrame(frame, corner_radius=10, fg_color="#2b2d31")
 frame_instrucoes.pack(fill="x", pady=(0, 5))
 
