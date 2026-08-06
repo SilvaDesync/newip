@@ -283,7 +283,7 @@ def abrir_janela_drivers():
             ("Olivetti PRT100", "https://www.olivetti.com/sites/default/files/products/drivers/toolkit_prt100_enhanced_2.00_03_0.exe"),
             ("XPrinter (Exe Direct)", "https://drive.google.com/file/d/1Eoesq26Krws0Ew4u8O7uMs8Z95rBKki3/view?usp=sharing"),
             ("Tanca TP-650 (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-650/Driver_Utilitarios_TP-650.zip"),
-            ("Tanca TP-550 (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-550/Driver_Utilitarios_TP-550.zip"),
+            ("Tanca TP-550. (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-550/Driver_Utilitarios_TP-550.zip"),
             ("Tanca TP-450 (Driver & Utility)", "https://www.tanca.com.br/assets/conteudo/drivers/TP-450/Driver_Utilitarios_TP-450.zip"),
             ("Tanca TP-620 Utility", "https://www.tanca.com.br/assets/conteudo/drivers/TP-620/PrinterTools_TP620.zip"),
             ("Tanca TP-620+ Driver", "https://www.tanca.com.br/assets/conteudo/drivers/TP-620+/Driver_Windows.zip"),
