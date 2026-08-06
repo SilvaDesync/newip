@@ -643,19 +643,34 @@ def abrir_janela_limpeza():
     btn_todos = ctk.CTkButton(win, text="[ EXCLUIR TODOS OS ITENS ]", fg_color="#f23f43", hover_color="#d03135", command=confirmar_remover_todos)
     btn_todos.pack(fill="x", padx=15, pady=(0, 15))
 
-# --- NOVO: FUNÇÃO PARA VARRER REDE E IDENTIFICAR IMPRESSORAS ---
+# --- NOVO: BUSCA DE IMPRESSORAS E DISPOSITIVOS NÃO ESPECIFICADOS DO WINDOWS ---
+def obter_impressoras_sistema_detalhadas():
+    """Consulta todas as impressoras e dispositivos cadastrados no Windows via PowerShell."""
+    cmd = "Get-Printer | Select-Object Name, PortName, DriverName, Default, PrinterStatus | ConvertTo-Json"
+    res = executar_ps(cmd)
+    if res.returncode == 0 and res.stdout.strip():
+        try:
+            dados = json.loads(res.stdout)
+            if isinstance(dados, dict):
+                return [dados]
+            return dados
+        except Exception:
+            return []
+    return []
+
+# --- VARREDURA COMPLETA (IP REDE + DISPOSITIVOS NÃO ESPECIFICADOS) ---
 def abrir_janela_varredura_impressoras():
     win = ctk.CTkToplevel(root)
-    win.title("Varredura de Impressoras na Rede")
-    win.geometry("480x420")
+    win.title("Varredura de Impressoras e Não Especificados")
+    win.geometry("520x520")
     win.resizable(False, False)
     win.configure(fg_color="#18191c")
     win.grab_set()
 
-    lbl_titulo = ctk.CTkLabel(win, text="VARREDURA DE IMPRESSORAS NA REDE LOCAL", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
-    lbl_titulo.pack(pady=(15, 5))
+    lbl_titulo = ctk.CTkLabel(win, text="VARREDURA DE IMPRESSORAS E DISPOSITIVOS", font=ctk.CTkFont(size=13, weight="bold"), text_color="#ffffff")
+    lbl_titulo.pack(pady=(15, 2))
 
-    lbl_status = ctk.CTkLabel(win, text="Clique no botão para iniciar a busca...", font=ctk.CTkFont(size=11), text_color="#949ba4")
+    lbl_status = ctk.CTkLabel(win, text="Clique abaixo para iniciar a varredura...", font=ctk.CTkFont(size=11), text_color="#949ba4")
     lbl_status.pack(pady=(0, 10))
 
     scroll_resultados = ctk.CTkScrollableFrame(win, corner_radius=10, fg_color="#202225")
@@ -676,11 +691,45 @@ def abrir_janela_varredura_impressoras():
         return False
 
     def executar_varredura():
-        btn_iniciar.configure(state="disabled", text="⏳ Varrendo rede (1 a 254)...")
-        lbl_status.configure(text="Testando portas 9100, 515 e 631...", text_color="#f0b232")
+        btn_iniciar.configure(state="disabled", text="⏳ Varrendo Sistema e Rede...")
+        lbl_status.configure(text="Buscando impressoras USB / Não Especificadas e varrendo a rede...", text_color="#f0b232")
         
         for widget in scroll_resultados.winfo_children():
             widget.destroy()
+
+        # 1. BUSCAR IMPRESSORAS DO WINDOWS / NÃO ESPECIFICADAS
+        impressoras_win = obter_impressoras_sistema_detalhadas()
+        
+        if impressoras_win:
+            lbl_cat_win = ctk.CTkLabel(scroll_resultados, text="📌 IMPRESSORAS / DISPOSITIVOS INSTALADOS NO WINDOWS", font=ctk.CTkFont(size=11, weight="bold"), text_color="#4752c4", anchor="w")
+            lbl_cat_win.pack(fill="x", padx=5, pady=(5, 5))
+
+            for imp in impressoras_win:
+                nome = imp.get("Name", "Desconhecida")
+                porta = imp.get("PortName", "N/A")
+                is_default = imp.get("Default", False)
+                
+                frame_item = ctk.CTkFrame(scroll_resultados, fg_color="#2b2d31", corner_radius=6)
+                frame_item.pack(fill="x", pady=3, padx=5)
+
+                txt_default = " ★ (Padrão)" if is_default else ""
+                lbl_nome = ctk.CTkLabel(frame_item, text=f"🖨️ {nome}{txt_default}\n📍 Porta: {porta}", font=ctk.CTkFont(size=11), text_color="#ffffff", justify="left", anchor="w")
+                lbl_nome.pack(side="left", padx=10, pady=6)
+
+                # Se a porta for um IP, permite selecionar diretamente
+                if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', porta):
+                    def selecionar_ip_win(ip_sel=porta):
+                        entry_novo_ip.delete(0, "end")
+                        entry_novo_ip.insert(0, ip_sel)
+                        ao_digitar_novo_ip()
+                        win.destroy()
+
+                    btn_usar_ip = ctk.CTkButton(frame_item, text="Usar IP", font=ctk.CTkFont(size=11), fg_color="#23a55a", hover_color="#1d8a4b", width=70, height=26, command=selecionar_ip_win)
+                    btn_usar_ip.pack(side="right", padx=10, pady=5)
+
+        # 2. VARREDURA DE REDE (TCP/IP)
+        lbl_cat_rede = ctk.CTkLabel(scroll_resultados, text="🌐 IMPRESSORAS ENCONTRADAS NA REDE LOCAL (RAW / PORTA 9100)", font=ctk.CTkFont(size=11, weight="bold"), text_color="#23a55a", anchor="w")
+        lbl_cat_rede.pack(fill="x", padx=5, pady=(15, 5))
 
         ip_atual = entry_ip_atual.get().strip()
         partes = ip_atual.split(".")
@@ -706,12 +755,11 @@ def abrir_janela_varredura_impressoras():
             t.join()
 
         if encontrados:
-            lbl_status.configure(text=f"✅ Sucesso! {len(encontrados)} impressora(s) localizada(s).", text_color="#23a55a")
             for ip in encontrados:
                 frame_item = ctk.CTkFrame(scroll_resultados, fg_color="#2b2d31", corner_radius=6)
                 frame_item.pack(fill="x", pady=3, padx=5)
 
-                lbl_ip_item = ctk.CTkLabel(frame_item, text=f"🖨️ {ip}", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
+                lbl_ip_item = ctk.CTkLabel(frame_item, text=f"🌐 IP Detectado: {ip}", font=ctk.CTkFont(size=12, weight="bold"), text_color="#ffffff")
                 lbl_ip_item.pack(side="left", padx=10, pady=8)
 
                 def selecionar_ip(ip_sel=ip):
@@ -723,16 +771,16 @@ def abrir_janela_varredura_impressoras():
                 btn_usar = ctk.CTkButton(frame_item, text="Usar este IP", font=ctk.CTkFont(size=11), fg_color="#4752c4", hover_color="#3c45a5", width=90, height=28, command=selecionar_ip)
                 btn_usar.pack(side="right", padx=10, pady=5)
         else:
-            lbl_status.configure(text="❌ Nenhuma impressora encontrada na sub-rede.", text_color="#f23f43")
-            lbl_vazio = ctk.CTkLabel(scroll_resultados, text="Verifique se a impressora está ligada e na mesma rede.", text_color="#949ba4")
-            lbl_vazio.pack(pady=20)
+            lbl_vazio = ctk.CTkLabel(scroll_resultados, text="Nenhuma impressora de rede respondeu na faixa de IP.", text_color="#949ba4")
+            lbl_vazio.pack(pady=10)
 
-        btn_iniciar.configure(state="normal", text="🔄 Varrer Rede Novamente")
+        lbl_status.configure(text=f"Varredura concluída! {len(encontrados)} impressora(s) de rede encontrada(s).", text_color="#23a55a")
+        btn_iniciar.configure(state="normal", text="🔄 Atualizar Varredura")
 
     def iniciar_thread():
         threading.Thread(target=executar_varredura, daemon=True).start()
 
-    btn_iniciar = ctk.CTkButton(win, text="🔍 Iniciar Varredura de Rede", font=ctk.CTkFont(size=12, weight="bold"), fg_color="#4752c4", hover_color="#3c45a5", height=38, command=iniciar_thread)
+    btn_iniciar = ctk.CTkButton(win, text="🔍 Iniciar Varredura de Dispositivos e Rede", font=ctk.CTkFont(size=12, weight="bold"), fg_color="#4752c4", hover_color="#3c45a5", height=38, command=iniciar_thread)
     btn_iniciar.pack(fill="x", padx=15, pady=(0, 15))
 
 cache_dados = carregar_cache()
@@ -945,10 +993,10 @@ btn_limpeza = ctk.CTkButton(
 )
 btn_limpeza.pack(fill="x", pady=(0, 8))
 
-# --- BOTÃO SOLICITADO: VARREDURA DE IMPRESSORAS NA REDE (ABAIXO DA LIMPEZA TOTAL) ---
+# --- BOTÃO DE VARREDURA DE IMPRESSORAS E DISPOSITIVOS NÃO ESPECIFICADOS ---
 btn_varredura_rede = ctk.CTkButton(
     frame, 
-    text="🔍 Varrer Rede e Identificar Impressoras", 
+    text="🔍 Varrer Dispositivos e Rede (IP / Não Especificados)", 
     font=ctk.CTkFont(size=11, weight="bold"),
     fg_color="#2b2d31", 
     hover_color="#3b3d44", 
